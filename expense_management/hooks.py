@@ -1,14 +1,39 @@
 app_name = "expense_management"
 app_title = "Expense Management"
 app_publisher = "MISL Holdings (Pvt) Ltd"
-app_description = "Expense Management"
+app_description = "A comprehensive expense management system with proper GL entries and accounting standards"
 app_email = "info@mislholdings.com"
 app_license = "mit"
 
 # Apps
 # ------------------
 
-# required_apps = []
+required_apps = ["erpnext"]
+
+# Fixtures
+fixtures = [
+    {
+        "dt": "Expense Type",
+        "filters": [
+            [
+                "name",
+                "in",
+                [
+                    "Office Supplies",
+                    "Travel & Transportation", 
+                    "Meals & Entertainment",
+                    "Communication",
+                    "Utilities",
+                    "Professional Services",
+                    "Training & Education",
+                    "Marketing & Advertising",
+                    "Insurance",
+                    "Maintenance & Repairs"
+                ]
+            ]
+        ]
+    }
+]
 
 # Each item in the list will be shown as an app in the apps page
 # add_to_apps_screen = [
@@ -83,7 +108,7 @@ app_license = "mit"
 # ------------
 
 # before_install = "expense_management.install.before_install"
-# after_install = "expense_management.install.after_install"
+after_install = "expense_management.install.after_install"
 
 # Uninstallation
 # ------------
@@ -188,6 +213,12 @@ app_license = "mit"
 # exempt linked doctypes from being automatically cancelled
 #
 # auto_cancel_exempted_doctypes = ["Auto Repeat"]
+
+# Accounting dimensions
+accounting_dimension_doctypes = ["Expense"]
+
+# GL Entry references
+gl_entry_doctypes = ["Expense"]
 
 # Ignore links to specified DocTypes when deleting documents
 # -----------------------------------------------------------
