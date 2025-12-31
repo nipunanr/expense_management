@@ -21,26 +21,13 @@ frappe.ui.form.on('Expense', {
 			};
 		});
 		
-		// Set focus to expense items if no description is needed
-		if (!frm.doc.description && frm.is_new()) {
-			setTimeout(() => {
-				frm.fields_dict.expense_items.grid.add_new_row();
-			}, 100);
-		}
-		
-		// Configure expense_items as editable grid
+		// Configure expense_items as editable grid - enable add/delete
 		frm.set_df_property('expense_items', 'cannot_add_rows', false);
 		frm.set_df_property('expense_items', 'cannot_delete_rows', false);
 		
-		// Enable inline editing for expense items grid
+		// Refresh grid to apply changes
 		if (frm.fields_dict['expense_items'] && frm.fields_dict['expense_items'].grid) {
-			frm.fields_dict['expense_items'].grid.only_sortable();
-			frm.fields_dict['expense_items'].grid.editable_fields = [
-				{fieldname: 'expense_type'},
-				{fieldname: 'expense_account'},
-				{fieldname: 'description'},
-				{fieldname: 'amount'}
-			];
+			frm.fields_dict['expense_items'].grid.refresh();
 		}
 	},
 	
@@ -84,7 +71,8 @@ frappe.ui.form.on('Expense Item', {
 				filters: {
 					"company": frm.doc.company,
 					"account_type": ["in", ["Expense Account", "Cost of Goods Sold"]],
-					"is_group": 0
+					"is_group": 0,
+					"disabled": 0
 				}
 			};
 		});
