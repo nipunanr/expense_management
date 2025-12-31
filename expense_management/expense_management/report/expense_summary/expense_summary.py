@@ -117,43 +117,11 @@ def get_data(filters):
 			 WHERE ei.parent = e.name 
 			 ORDER BY ei.amount DESC LIMIT 1) as top_expense_account
 		FROM `tabExpense` e
-		WHERE 1=1 {conditions}
+		WHERE {conditions}
 		ORDER BY e.expense_date DESC, e.creation DESC
 	""".format(conditions=conditions)
 	
-	return frappe.db.sql(query, as_dict=1)
-
-
-def get_conditions(filters):
-	conditions = []
-	
-	if filters.get("company"):
-		conditions.append("AND e.company = %(company)s")
-	
-	if filters.get("from_date"):
-		conditions.append("AND e.expense_date >= %(from_date)s")
-	
-	if filters.get("to_date"):
-		conditions.append("AND e.expense_date <= %(to_date)s")
-	
-	if filters.get("payment_account"):
-		conditions.append("AND e.payment_account = %(payment_account)s")
-	
-	if filters.get("payment_mode"):
-		conditions.append("AND e.payment_mode = %(payment_mode)s")
-	
-	if filters.get("status"):
-		if filters.get("status") == "Draft":
-			conditions.append("AND e.docstatus = 0")
-		elif filters.get("status") == "Submitted":
-			conditions.append("AND e.docstatus = 1")
-		elif filters.get("status") == "Cancelled":
-			conditions.append("AND e.docstatus = 2")
-	
-	if filters.get("owner"):
-		conditions.append("AND e.owner = %(owner)s")
-	
-	return " ".join(conditions)
+	return frappe.db.sql(query, filters, as_dict=1)
 
 
 def get_summary_data(filters):
@@ -170,7 +138,7 @@ def get_summary_data(filters):
 			COUNT(CASE WHEN e.docstatus = 0 THEN 1 END) as count_draft,
 			COUNT(CASE WHEN e.docstatus = 2 THEN 1 END) as count_cancelled
 		FROM `tabExpense` e
-		WHERE 1=1 {conditions}
+		WHERE {conditions}
 	""".format(conditions=conditions)
 	
 	totals = frappe.db.sql(total_query, filters, as_dict=1)[0]
@@ -228,7 +196,7 @@ def get_chart_data(filters):
 			SUM(CASE WHEN e.docstatus = 1 THEN e.total_amount ELSE 0 END) as amount,
 			COUNT(CASE WHEN e.docstatus = 1 THEN 1 END) as count
 		FROM `tabExpense` e
-		WHERE e.docstatus = 1 {conditions}
+		WHERE e.docstatus = 1 AND {conditions}
 		GROUP BY DATE_FORMAT(e.expense_date, '%%Y-%%m')
 		ORDER BY month DESC
 		LIMIT 12
@@ -285,18 +253,29 @@ def get_conditions(filters):
 	conditions = ["1=1"]
 	
 	if filters.get("company"):
-		conditions.append("company = %(company)s")
+		conditions.append("e.company = %(company)s")
 	
 	if filters.get("from_date"):
-		conditions.append("expense_date >= %(from_date)s")
+		conditions.append("e.expense_date >= %(from_date)s")
 	
 	if filters.get("to_date"):
-		conditions.append("expense_date <= %(to_date)s")
+		conditions.append("e.expense_date <= %(to_date)s")
 	
 	if filters.get("payment_account"):
-		conditions.append("payment_account = %(payment_account)s")
+		conditions.append("e.payment_account = %(payment_account)s")
 	
-	if filters.get("docstatus"):
-		conditions.append("docstatus = %(docstatus)s")
+	if filters.get("payment_mode"):
+		conditions.append("e.payment_mode = %(payment_mode)s")
+	
+	if filters.get("status"):
+		if filters.get("status") == "Draft":
+			conditions.append("e.docstatus = 0")
+		elif filters.get("status") == "Submitted":
+			conditions.append("e.docstatus = 1")
+		elif filters.get("status") == "Cancelled":
+			conditions.append("e.docstatus = 2")
+	
+	if filters.get("owner"):
+		conditions.append("e.owner = %(owner)s")
 	
 	return " AND ".join(conditions)
