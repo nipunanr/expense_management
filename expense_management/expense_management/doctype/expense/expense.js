@@ -58,6 +58,23 @@ frappe.ui.form.on('Expense', {
 		}
 		
 		/* ------------------------------------------------------------
+		 * View Accounting Ledger Button (Submitted/Cancelled)
+		 * ------------------------------------------------------------ */
+		if (frm.doc.docstatus === 1 || frm.doc.docstatus === 2) {
+			frm.add_custom_button(__('Accounting Ledger'), function () {
+				frappe.route_options = {
+					voucher_no: frm.doc.name,
+					from_date: frm.doc.expense_date,
+					to_date: frm.doc.expense_date,
+					company: frm.doc.company,
+					group_by: "Group by Voucher (Consolidated)",
+					show_cancelled_entries: frm.doc.docstatus === 2
+				};
+				frappe.set_route("query-report", "General Ledger");
+			}, __('View'));
+		}
+		
+		/* ------------------------------------------------------------
 		 * Toggle Exchange Rate Field Visibility
 		 * ------------------------------------------------------------ */
 		toggle_exchange_rate_field(frm);
