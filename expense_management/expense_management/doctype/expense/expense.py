@@ -11,10 +11,51 @@ from erpnext.accounts.utils import get_account_currency
 class Expense(Document):
 	def validate(self):
 		"""Validate Expense before save"""
+		self.set_currency()
 		self.validate_expense_items()
 		self.validate_payment_account()
+		self.validate_currency()
 		self.validate_expense_date()
+		self.set_exchange_rate()
 		self.calculate_total_amount()
+	
+	def set_currency(self):
+		"""Set currency from payment account"""
+		if self.payment_account:
+			self.currency = get_account_currency(self.payment_account)
+	
+	def set_exchange_rate(self):
+		"""Set exchange rate if currency is different from company currency"""
+		if not self.currency:
+			return
+		
+		company_currency = frappe.get_cached_value("Company", self.company, "default_currency")
+		
+		if self.currency == company_currency:
+			self.exchange_rate = 1.0
+		elif not self.exchange_rate or self.exchange_rate == 0:
+			# Get exchange rate from system
+			from erpnext.setup.utils import get_exchange_rate
+			self.exchange_rate = get_exchange_rate(self.currency, company_currency, self.expense_date)
+	
+	def validate_currency(self):
+		"""Validate that all accounts have the same currency"""
+		if not self.payment_account:
+			return
+		
+		payment_currency = get_account_currency(self.payment_account)
+		
+		for item in self.expense_items:
+			if not item.expense_account:
+				continue
+			
+			expense_currency = get_account_currency(item.expense_account)
+			
+			if expense_currency != payment_currency:
+				frappe.throw(
+					f"Row {item.idx}: Expense Account currency ({expense_currency}) must match "
+					f"Payment Account currency ({payment_currency})"
+				)
 		
 	def validate_expense_items(self):
 		"""Validate expense items"""
@@ -155,8 +196,9 @@ class Expense(Document):
 		if not hasattr(self, 'expense_items') or not self.expense_items:
 			frappe.throw("No expense items found. Please add at least one expense item.")
 		
-		# Get company's default cost center
+		# Get company's default cost center and currency
 		cost_center = frappe.get_cached_value("Company", self.company, "cost_center")
+		company_currency = frappe.get_cached_value("Company", self.company, "default_currency")
 		
 		# Group expense items by account to consolidate GL entries
 		account_wise_totals = {}
@@ -179,18 +221,23 @@ class Expense(Document):
 				account_wise_totals[expense_account] = 0
 			account_wise_totals[expense_account] += flt(amount)
 		
+		# Calculate amounts in company currency
+		exchange_rate = flt(self.exchange_rate) if self.exchange_rate else 1.0
+		
 		# Create debit entries for each expense account
 		for account, amount in account_wise_totals.items():
+			amount_in_company_currency = flt(amount) * exchange_rate
+			
 			gl_entries.append(
 				frappe._dict({
 					"account": account,
 					"party_type": None,
 					"party": None,
-					"debit": flt(amount),
+					"debit": amount_in_company_currency,
 					"credit": 0,
 					"debit_in_account_currency": flt(amount),
 					"credit_in_account_currency": 0,
-					"account_currency": get_account_currency(account),
+					"account_currency": self.currency,
 					"against": self.payment_account,
 					"voucher_type": self.doctype,
 					"voucher_no": self.name,
@@ -204,16 +251,18 @@ class Expense(Document):
 			)
 		
 		# Create single credit entry for payment account
+		total_in_company_currency = flt(self.total_amount) * exchange_rate
+		
 		gl_entries.append(
 			frappe._dict({
 				"account": self.payment_account,
 				"party_type": None,
 				"party": None,
 				"debit": 0,
-				"credit": flt(self.total_amount),
+				"credit": total_in_company_currency,
 				"debit_in_account_currency": 0,
 				"credit_in_account_currency": flt(self.total_amount),
-				"account_currency": get_account_currency(self.payment_account),
+				"account_currency": self.currency,
 				"against": ", ".join(account_wise_totals.keys()),
 				"voucher_type": self.doctype,
 				"voucher_no": self.name,
@@ -262,6 +311,7 @@ class Expense(Document):
 		except Exception as e:
 			frappe.throw(f"Error generating GL entries preview: {str(e)}")
 			return []
+
 @frappe.whitelist()
 def get_expense_account_from_type(expense_type):
 	"""Get default expense account from expense type"""
@@ -270,3 +320,20 @@ def get_expense_account_from_type(expense_type):
 	
 	expense_type_doc = frappe.get_doc("Expense Type", expense_type)
 	return expense_type_doc.default_account
+
+@frappe.whitelist()
+def get_account_currency_for_expense(account):
+	"""Get account currency - whitelisted method for client-side calls"""
+	if not account:
+		return None
+	
+	from erpnext.accounts.utils import get_account_currency
+	return get_account_currency(account)
+
+@frappe.whitelist()
+def get_company_default_currency(company):
+	"""Get company default currency - whitelisted method for client-side calls"""
+	if not company:
+		return None
+	
+	return frappe.get_cached_value("Company", company, "default_currency")

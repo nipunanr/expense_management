@@ -9,28 +9,33 @@ frappe.ui.form.on('Expense', {
 		 * Payment Account Filter (Cash / Bank only)
 		 * ------------------------------------------------------------ */
 		frm.set_query("payment_account", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					account_type: ["in", ["Cash", "Bank"]],
-					is_group: 0,
-					disabled: 0
-				}
+			let filters = {
+				company: frm.doc.company,
+				account_type: ["in", ["Cash", "Bank"]],
+				is_group: 0,
+				disabled: 0
 			};
+			
+			return { filters: filters };
 		});
 
 		/* ------------------------------------------------------------
 		 * ✅ FIXED: Expense Account Filter for Child Table
 		 * ------------------------------------------------------------ */
 		frm.set_query("expense_account", "expense_items", function () {
-			return {
-				filters: {
-					company: frm.doc.company,
-					account_type: "Expense Account",
-					is_group: 0,
-					disabled: 0
-				}
+			let filters = {
+				company: frm.doc.company,
+				root_type: "Expense",
+				is_group: 0,
+				disabled: 0
 			};
+			
+			// Add currency filter if currency is set
+			if (frm.doc.currency) {
+				filters.account_currency = frm.doc.currency;
+			}
+			
+			return { filters: filters };
 		});
 
 		/* ------------------------------------------------------------
@@ -51,11 +56,67 @@ frappe.ui.form.on('Expense', {
 				preview_gl_entries(frm);
 			});
 		}
+		
+		/* ------------------------------------------------------------
+		 * Toggle Exchange Rate Field Visibility
+		 * ------------------------------------------------------------ */
+		toggle_exchange_rate_field(frm);
 	},
 
 	company: function (frm) {
 		// Clear payment account when company changes
 		frm.set_value('payment_account', '');
+		frm.set_value('currency', '');
+		toggle_exchange_rate_field(frm);
+	},
+	
+	payment_account: function(frm) {
+		// Set currency from payment account
+		if (frm.doc.payment_account && frm.doc.company) {
+			frappe.call({
+				method: 'expense_management.expense_management.doctype.expense.expense.get_account_currency_for_expense',
+				args: {
+					account: frm.doc.payment_account
+				},
+				callback: function(r) {
+					if (r.message) {
+						frm.set_value('currency', r.message);
+						
+						// Update expense account filter to match currency
+						frm.fields_dict.expense_items.grid.update_docfield_property(
+							'expense_account',
+							'get_query',
+							function() {
+								return {
+									filters: {
+										company: frm.doc.company,
+										root_type: "Expense",
+										is_group: 0,
+										disabled: 0,
+										account_currency: frm.doc.currency
+									}
+								};
+							}
+						);
+						
+						// Set exchange rate
+						set_exchange_rate(frm);
+						toggle_exchange_rate_field(frm);
+					}
+				}
+			});
+		}
+	},
+	
+	currency: function(frm) {
+		set_exchange_rate(frm);
+		toggle_exchange_rate_field(frm);
+	},
+	
+	expense_date: function(frm) {
+		if (frm.doc.currency) {
+			set_exchange_rate(frm);
+		}
 	}
 });
 
@@ -78,10 +139,40 @@ frappe.ui.form.on('Expense Item', {
 			},
 			callback: function (r) {
 				if (r.message) {
-					frappe.model.set_value(cdt, cdn, 'expense_account', r.message);
+					// Check if account currency matches form currency
+					if (frm.doc.currency) {
+						frappe.call({
+							method: 'expense_management.expense_management.doctype.expense.expense.get_account_currency_for_expense',
+							args: {
+								account: r.message
+							},
+							callback: function (curr_r) {
+								if (curr_r.message && curr_r.message === frm.doc.currency) {
+									// Currency matches, set the account
+									frappe.model.set_value(cdt, cdn, 'expense_account', r.message);
 
-					if (!row.description) {
-						frappe.model.set_value(cdt, cdn, 'description', row.expense_type);
+									if (!row.description) {
+										frappe.model.set_value(cdt, cdn, 'description', row.expense_type);
+									}
+								} else {
+									// Currency doesn't match
+									frappe.model.set_value(cdt, cdn, 'expense_account', '');
+									frappe.msgprint({
+										title: __('Currency Mismatch'),
+										indicator: 'orange',
+										message: __('The default account for {0} has currency {1}, but the payment account uses {2}. Please select a matching expense account.', 
+											[row.expense_type, curr_r.message || 'Unknown', frm.doc.currency])
+									});
+								}
+							}
+						});
+					} else {
+						// No currency set yet, just set the account
+						frappe.model.set_value(cdt, cdn, 'expense_account', r.message);
+
+						if (!row.description) {
+							frappe.model.set_value(cdt, cdn, 'description', row.expense_type);
+						}
 					}
 				}
 			}
@@ -91,7 +182,33 @@ frappe.ui.form.on('Expense Item', {
 	expense_account: function (frm, cdt, cdn) {
 		let row = locals[cdt][cdn];
 
-		if (row.expense_account && !row.description) {
+		if (!row.expense_account) return;
+
+		// Validate currency match
+		if (frm.doc.currency) {
+			frappe.call({
+				method: 'expense_management.expense_management.doctype.expense.expense.get_account_currency_for_expense',
+				args: {
+					account: row.expense_account
+				},
+				callback: function (r) {
+					if (r.message && r.message !== frm.doc.currency) {
+						// Currency doesn't match - clear the field
+						frappe.model.set_value(cdt, cdn, 'expense_account', '');
+						frappe.msgprint({
+							title: __('Currency Mismatch'),
+							indicator: 'red',
+							message: __('Selected account has currency {0}, but payment account uses {1}. Please select an account with matching currency.', 
+								[r.message, frm.doc.currency])
+						});
+						return;
+					}
+				}
+			});
+		}
+
+		// Auto-set description from account name if not provided
+		if (!row.description) {
 			frappe.call({
 				method: 'frappe.client.get_value',
 				args: {
@@ -132,6 +249,64 @@ function calculate_total(frm) {
 	frm.set_value('total_amount', total);
 }
 
+function set_exchange_rate(frm) {
+	if (!frm.doc.currency || !frm.doc.company) {
+		return;
+	}
+	
+	frappe.call({
+		method: 'expense_management.expense_management.doctype.expense.expense.get_company_default_currency',
+		args: {
+			company: frm.doc.company
+		},
+		callback: function(r) {
+			if (r.message) {
+				let company_currency = r.message;
+				
+				if (frm.doc.currency === company_currency) {
+					frm.set_value('exchange_rate', 1.0);
+				} else if (!frm.doc.exchange_rate || frm.doc.exchange_rate === 0) {
+					// Get exchange rate
+					frappe.call({
+						method: 'erpnext.setup.utils.get_exchange_rate',
+						args: {
+							from_currency: frm.doc.currency,
+							to_currency: company_currency,
+							transaction_date: frm.doc.expense_date || frappe.datetime.get_today()
+						},
+						callback: function(r) {
+							if (r.message) {
+								frm.set_value('exchange_rate', r.message);
+							}
+						}
+					});
+				}
+			}
+		}
+	});
+}
+
+function toggle_exchange_rate_field(frm) {
+	if (!frm.doc.currency || !frm.doc.company) {
+		frm.set_df_property('exchange_rate', 'hidden', 1);
+		return;
+	}
+	
+	frappe.call({
+		method: 'expense_management.expense_management.doctype.expense.expense.get_company_default_currency',
+		args: {
+			company: frm.doc.company
+		},
+		callback: function(r) {
+			if (r.message) {
+				let company_currency = r.message;
+				// Show exchange rate field only if currency differs from company currency
+				let should_hide = (frm.doc.currency === company_currency);
+				frm.set_df_property('exchange_rate', 'hidden', should_hide ? 1 : 0);
+			}
+		}
+	});
+}
 
 /* =====================================================================
  * GL Preview Logic
