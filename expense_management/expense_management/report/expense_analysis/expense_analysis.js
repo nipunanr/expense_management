@@ -33,7 +33,7 @@ frappe.query_reports["Expense Analysis"] = {
 			"get_query": function() {
 				return {
 					"filters": {
-						"account_type": ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Receivable"]],
+						"account_type": ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset"]],
 						"is_group": 0,
 						"company": frappe.query_report.get_filter_value('company')
 					}

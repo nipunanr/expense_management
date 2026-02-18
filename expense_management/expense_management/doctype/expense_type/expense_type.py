@@ -14,5 +14,5 @@ class ExpenseType(Document):
 		# Validate default account if provided
 		if self.default_account:
 			account = frappe.get_doc("Account", self.default_account)
-			if account.account_type not in ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Receivable"]:
-				frappe.throw(f"Default Account must be an Expense Account, Cost of Goods Sold, Fixed Asset, or Receivable account")
+			if account.account_type not in ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset"]:
+				frappe.throw(f"Default Account must be an Expense Account, Cost of Goods Sold, Fixed Asset, or Current Asset account")

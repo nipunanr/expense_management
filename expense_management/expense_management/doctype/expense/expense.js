@@ -25,7 +25,7 @@ frappe.ui.form.on('Expense', {
 		frm.set_query("expense_account", "expense_items", function () {
 			let filters = {
 				company: frm.doc.company,
-				account_type: ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Receivable"]],
+				account_type: ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset"]],
 				is_group: 0,
 				disabled: 0
 			};
@@ -107,7 +107,7 @@ frappe.ui.form.on('Expense', {
 								return {
 									filters: {
 										company: frm.doc.company,
-										account_type: ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Receivable"]],
+										account_type: ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset"]],
 										is_group: 0,
 										disabled: 0,
 										account_currency: frm.doc.currency

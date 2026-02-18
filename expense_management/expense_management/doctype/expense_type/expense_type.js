@@ -7,7 +7,7 @@ frappe.ui.form.on('Expense Type', {
 		frm.set_query("default_account", function() {
 			return {
 				filters: {
-					account_type: ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Receivable"]],
+					account_type: ["in", ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset"]],
 					is_group: 0,
 					disabled: 0
 				}
