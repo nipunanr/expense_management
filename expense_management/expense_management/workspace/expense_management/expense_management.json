@@ -1,21 +1,89 @@
 {
  "app": "expense_management",
- "charts": [],
- "content": "[{\"id\":\"nL2-YUBHEv\",\"type\":\"card\",\"data\":{\"card_name\":\"Expense Management\",\"col\":4}},{\"id\":\"q9h8COiRkO\",\"type\":\"card\",\"data\":{\"card_name\":\"Reports\",\"col\":4}}]",
- "creation": "2026-02-11 11:51:39.916915",
+ "charts": [
+  {
+   "chart_name": "Monthly Expense Analysis",
+   "label": "Monthly Expense Analysis"
+  },
+  {
+   "chart_name": "Expense Type Analysis",
+   "label": "Expense Type Analysis"
+  }
+ ],
+ "content": "[{\"id\":\"R_jTwGDtS5\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h4\\\">Expense Management</span>\",\"col\":12}},{\"id\":\"y5x1m_zG2M\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Monthly Expense Analysis\",\"col\":6}},{\"id\":\"hOh35MDL9P\",\"type\":\"chart\",\"data\":{\"chart_name\":\"Expense Type Analysis\",\"col\":6}},{\"id\":\"ovUDfOv6L1\",\"type\":\"card\",\"data\":{\"card_name\":\"Expense Details\",\"col\":4}},{\"id\":\"pszA96BVtP\",\"type\":\"card\",\"data\":{\"card_name\":\"Expense Reports\",\"col\":4}}]",
+ "creation": "2026-02-26 12:29:46.614549",
  "custom_blocks": [],
  "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
- "icon": "receipt",
+ "icon": "dollar-sign",
  "idx": 0,
- "indicator_color": "blue",
+ "indicator_color": "green",
  "is_hidden": 0,
  "label": "Expense Management",
  "link_type": "DocType",
- "links": [],
- "modified": "2026-02-26 12:24:58.098399",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expense Details",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expense",
+   "link_count": 0,
+   "link_to": "Expense",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expense Type",
+   "link_count": 0,
+   "link_to": "Expense Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Expense Reports",
+   "link_count": 2,
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expense Analysis",
+   "link_count": 0,
+   "link_to": "Expense Analysis",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 1,
+   "label": "Expense Summary",
+   "link_count": 0,
+   "link_to": "Expense Summary",
+   "link_type": "Report",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2026-02-26 12:37:34.282020",
  "modified_by": "Administrator",
  "module": "Expense Management",
  "name": "Expense Management",
