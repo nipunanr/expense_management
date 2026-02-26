@@ -14,65 +14,8 @@
  "is_hidden": 0,
  "label": "Expense Management",
  "link_type": "DocType",
- "links": [
-  {
-   "dependencies": "",
-   "description": "Record and manage business expenses",
-   "hidden": 0,
-   "icon": "receipt",
-   "is_query_report": 0,
-   "label": "Expense",
-   "link_count": 0,
-   "link_to": "Expense",
-   "link_type": "DocType",
-   "onboard": 0,
-   "only_for": "",
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "description": "Manage expense categories and types",
-   "hidden": 0,
-   "icon": "tag",
-   "is_query_report": 0,
-   "label": "Expense Type",
-   "link_count": 0,
-   "link_to": "Expense Type",
-   "link_type": "DocType",
-   "onboard": 0,
-   "only_for": "",
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "description": "Comprehensive expense analysis and summary",
-   "hidden": 0,
-   "icon": "bar-chart",
-   "is_query_report": 1,
-   "label": "Expense Summary",
-   "link_count": 0,
-   "link_to": "Expense Summary",
-   "link_type": "Report",
-   "onboard": 0,
-   "only_for": "",
-   "type": "Link"
-  },
-  {
-   "dependencies": "",
-   "description": "Detailed expense analysis by type and account",
-   "hidden": 0,
-   "icon": "pie-chart",
-   "is_query_report": 1,
-   "label": "Expense Analysis",
-   "link_count": 0,
-   "link_to": "Expense Analysis",
-   "link_type": "Report",
-   "onboard": 0,
-   "only_for": "",
-   "type": "Link"
-  }
- ],
- "modified": "2026-02-26 09:45:10.805797",
+ "links": [],
+ "modified": "2026-02-26 12:24:58.098399",
  "modified_by": "Administrator",
  "module": "Expense Management",
  "name": "Expense Management",
@@ -83,39 +26,7 @@
  "quick_lists": [],
  "roles": [],
  "sequence_id": 35.0,
- "shortcuts": [
-  {
-   "color": "Blue",
-   "doc_view": "",
-   "format": "",
-   "icon": "receipt",
-   "label": "New Expense",
-   "link_to": "Expense",
-   "stats_filter": "{\n \"docstatus\": 0\n}",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "doc_view": "List",
-   "format": "",
-   "icon": "file-text",
-   "label": "Expense List",
-   "link_to": "Expense",
-   "stats_filter": "{}",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "doc_view": "",
-   "format": "",
-   "icon": "bar-chart",
-   "label": "Expense Reports",
-   "link_to": "Expense Summary",
-   "report_ref_doctype": "Expense",
-   "stats_filter": "{}",
-   "type": "Report"
-  }
- ],
+ "shortcuts": [],
  "title": "Expense Management",
  "type": "Workspace"
 }
