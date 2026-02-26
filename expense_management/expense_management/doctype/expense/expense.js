@@ -128,12 +128,21 @@ frappe.ui.form.on('Expense', {
 	currency: function(frm) {
 		set_exchange_rate(frm);
 		toggle_exchange_rate_field(frm);
+		calculate_total_amount_company_currency(frm);
 	},
 	
 	expense_date: function(frm) {
 		if (frm.doc.currency) {
 			set_exchange_rate(frm);
 		}
+	},
+	
+	exchange_rate: function(frm) {
+		calculate_total_amount_company_currency(frm);
+	},
+	
+	total_amount: function(frm) {
+		calculate_total_amount_company_currency(frm);
 	}
 });
 
@@ -264,6 +273,37 @@ function calculate_total(frm) {
 	});
 
 	frm.set_value('total_amount', total);
+	calculate_total_amount_company_currency(frm);
+}
+
+function calculate_total_amount_company_currency(frm) {
+	if (!frm.doc.company || !frm.doc.currency) {
+		return;
+	}
+	
+	frappe.call({
+		method: 'expense_management.expense_management.doctype.expense.expense.get_company_default_currency',
+		args: {
+			company: frm.doc.company
+		},
+		async: false,
+		callback: function(r) {
+			if (r.message) {
+				let company_currency = r.message;
+				let total_amount = flt(frm.doc.total_amount);
+				
+				if (frm.doc.currency === company_currency) {
+					// Same currency - directly use total_amount
+					frm.set_value('total_amount_company_currency', total_amount);
+				} else {
+					// Different currency - multiply by exchange rate
+					let exchange_rate = flt(frm.doc.exchange_rate) || 1.0;
+					let total_company = total_amount * exchange_rate;
+					frm.set_value('total_amount_company_currency', total_company);
+				}
+			}
+		}
+	});
 }
 
 function set_exchange_rate(frm) {
@@ -283,9 +323,9 @@ function set_exchange_rate(frm) {
 				if (frm.doc.currency === company_currency) {
 					frm.set_value('exchange_rate', 1.0);
 				} else if (!frm.doc.exchange_rate || frm.doc.exchange_rate === 0) {
-					// Get exchange rate
+					// Get exchange rate with detailed messaging
 					frappe.call({
-						method: 'erpnext.setup.utils.get_exchange_rate',
+						method: 'expense_management.expense_management.doctype.expense.expense.get_exchange_rate_with_message',
 						args: {
 							from_currency: frm.doc.currency,
 							to_currency: company_currency,
@@ -293,7 +333,24 @@ function set_exchange_rate(frm) {
 						},
 						callback: function(r) {
 							if (r.message) {
-								frm.set_value('exchange_rate', r.message);
+								let result = r.message;
+								frm.set_value('exchange_rate', result.exchange_rate);
+								
+								// Show appropriate message based on status
+								if (result.status === 'older_rate') {
+									frappe.msgprint({
+										title: __('Exchange Rate'),
+										indicator: 'orange',
+										message: __(result.message)
+									});
+								} else if (result.status === 'not_found') {
+									frappe.msgprint({
+										title: __('Exchange Rate Not Found'),
+										indicator: 'red',
+										message: __(result.message)
+									});
+								}
+								// For exact_match, no message needed (silent success)
 							}
 						}
 					});

@@ -18,6 +18,7 @@ class Expense(Document):
 		self.validate_expense_date()
 		self.set_exchange_rate()
 		self.calculate_total_amount()
+		self.calculate_total_amount_company_currency()
 	
 	def set_currency(self):
 		"""Set currency from payment account"""
@@ -104,6 +105,24 @@ class Expense(Document):
 	def calculate_total_amount(self):
 		"""Calculate total amount from expense items"""
 		self.total_amount = sum(flt(item.amount) for item in self.expense_items)
+	
+	def calculate_total_amount_company_currency(self):
+		"""Calculate total amount in company currency"""
+		if not self.company or not self.currency:
+			return
+		
+		company_currency = frappe.get_cached_value("Company", self.company, "default_currency")
+		
+		# Ensure total_amount is calculated first
+		total_amt = flt(self.total_amount)
+		
+		# If currency is same as company currency, directly use total_amount
+		if self.currency == company_currency:
+			self.total_amount_company_currency = total_amt
+		else:
+			# Use exchange rate to convert to company currency
+			exchange_rate = flt(self.exchange_rate) if self.exchange_rate else 1.0
+			self.total_amount_company_currency = total_amt * exchange_rate
 	
 	def calculate_total(self):
 		"""Alias for calculate_total_amount for backward compatibility"""
@@ -337,3 +356,68 @@ def get_company_default_currency(company):
 		return None
 	
 	return frappe.get_cached_value("Company", company, "default_currency")
+
+@frappe.whitelist()
+def get_exchange_rate_with_message(from_currency, to_currency, transaction_date=None):
+	"""
+	Get exchange rate with detailed messaging about date matching
+	Returns: dict with exchange_rate, message, and status
+	"""
+	from frappe.utils import getdate, get_datetime_str, nowdate
+	
+	if not (from_currency and to_currency):
+		return {"exchange_rate": 1.0, "message": "Invalid currencies", "status": "error"}
+	
+	if from_currency == to_currency:
+		return {"exchange_rate": 1.0, "message": "", "status": "success"}
+	
+	if not transaction_date:
+		transaction_date = nowdate()
+	
+	transaction_date = getdate(transaction_date)
+	
+	# First, check for exact date match
+	exact_rate = frappe.db.get_value(
+		"Currency Exchange",
+		filters={
+			"date": transaction_date,
+			"from_currency": from_currency,
+			"to_currency": to_currency
+		},
+		fieldname="exchange_rate"
+	)
+	
+	if exact_rate:
+		return {
+			"exchange_rate": flt(exact_rate),
+			"message": f"Exchange rate found for {transaction_date}",
+			"status": "exact_match"
+		}
+	
+	# Check for older rates
+	older_rates = frappe.get_all(
+		"Currency Exchange",
+		filters={
+			"date": ["<=", get_datetime_str(transaction_date)],
+			"from_currency": from_currency,
+			"to_currency": to_currency
+		},
+		fields=["exchange_rate", "date"],
+		order_by="date desc",
+		limit=1
+	)
+	
+	if older_rates:
+		rate_date = getdate(older_rates[0].date)
+		return {
+			"exchange_rate": flt(older_rates[0].exchange_rate),
+			"message": f"No exchange rate found for {transaction_date}. Using rate from {rate_date}",
+			"status": "older_rate"
+		}
+	
+	# No rate found at all
+	return {
+		"exchange_rate": 1.0,
+		"message": f"No exchange rate found for {from_currency} to {to_currency}. Using rate 1.0. Please add a Currency Exchange record.",
+		"status": "not_found"
+	}

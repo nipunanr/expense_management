@@ -5,14 +5,14 @@
    "col": 4,
    "hidden": 0,
    "label": "Expense Management",
-   "links": "[\n {\n  \"dependencies\": \"\",\n  \"description\": \"Record and manage business expenses\",\n  \"icon\": \"expense\",\n  \"is_query_report\": 0,\n  \"label\": \"Expense\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense\",\n  \"link_type\": \"DocType\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n },\n {\n  \"dependencies\": \"\",\n  \"description\": \"Manage expense categories and types\",\n  \"icon\": \"category\",\n  \"is_query_report\": 0,\n  \"label\": \"Expense Type\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense Type\",\n  \"link_type\": \"DocType\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n }\n]"
+   "links": "[\n {\n  \"dependencies\": \"\",\n  \"description\": \"Record and manage business expenses\",\n  \"icon\": \"receipt\",\n  \"is_query_report\": 0,\n  \"label\": \"Expense\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense\",\n  \"link_type\": \"DocType\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n },\n {\n  \"dependencies\": \"\",\n  \"description\": \"Manage expense categories and types\",\n  \"icon\": \"tag\",\n  \"is_query_report\": 0,\n  \"label\": \"Expense Type\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense Type\",\n  \"link_type\": \"DocType\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n }\n]"
   },
   {
    "card_name": "Reports",
    "col": 4,
    "hidden": 0,
    "label": "Reports",
-   "links": "[\n {\n  \"dependencies\": \"\",\n  \"description\": \"Comprehensive expense analysis and summary\",\n  \"icon\": \"report\",\n  \"is_query_report\": 1,\n  \"label\": \"Expense Summary\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense Summary\",\n  \"link_type\": \"Report\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n },\n {\n  \"dependencies\": \"\",\n  \"description\": \"Detailed expense analysis by type and account\",\n  \"icon\": \"analytics\",\n  \"is_query_report\": 1,\n  \"label\": \"Expense Analysis\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense Analysis\",\n  \"link_type\": \"Report\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n }\n]"
+   "links": "[\n {\n  \"dependencies\": \"\",\n  \"description\": \"Comprehensive expense analysis and summary\",\n  \"icon\": \"bar-chart\",\n  \"is_query_report\": 1,\n  \"label\": \"Expense Summary\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense Summary\",\n  \"link_type\": \"Report\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n },\n {\n  \"dependencies\": \"\",\n  \"description\": \"Detailed expense analysis by type and account\",\n  \"icon\": \"pie-chart\",\n  \"is_query_report\": 1,\n  \"label\": \"Expense Analysis\",\n  \"link_count\": 0,\n  \"link_to\": \"Expense Analysis\",\n  \"link_type\": \"Report\",\n  \"onboard\": 0,\n  \"type\": \"Link\"\n }\n]"
   }
  ],
  "category": "Modules",
@@ -26,7 +26,7 @@
  "extends_another_page": 0,
  "for_user": "",
  "hide_custom": 0,
- "icon": "expense",
+ "icon": "receipt",
  "indicator_color": "Blue",
  "is_hidden": 0,
  "label": "Expense Management",
@@ -47,7 +47,7 @@
   {
    "color": "Blue",
    "doc_view": "",
-   "icon": "expense",
+   "icon": "receipt",
    "label": "New Expense",
    "link_to": "Expense",
    "stats_filter": "{\n \"docstatus\": 0\n}",
@@ -56,7 +56,7 @@
   {
    "color": "Green",
    "doc_view": "List",
-   "icon": "list",
+   "icon": "file-text",
    "label": "Expense List",
    "link_to": "Expense",
    "stats_filter": "{}",
@@ -65,7 +65,7 @@
   {
    "color": "Orange",
    "doc_view": "",
-   "icon": "report",
+   "icon": "bar-chart",
    "label": "Expense Reports",
    "link_to": "Expense Summary",
    "stats_filter": "{}",
