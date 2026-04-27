@@ -73,8 +73,8 @@ class Expense(Document):
 			
 			# Validate expense account
 			expense_account = frappe.get_doc("Account", item.expense_account)
-			if expense_account.account_type not in ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset"]:
-				frappe.throw(f"Row {item.idx}: Expense Account must be an Expense Account, Cost of Goods Sold, Fixed Asset, or Current Asset account")
+			if expense_account.account_type not in ["Expense Account", "Cost of Goods Sold", "Fixed Asset", "Current Asset", "Chargeable", "Tax"]:
+				frappe.throw(f"Row {item.idx}: Expense Account must be an Expense Account, Cost of Goods Sold, Fixed Asset, Current Asset, Chargeable, or Tax account")
 			
 			# Validate company consistency
 			if expense_account.company != self.company:
