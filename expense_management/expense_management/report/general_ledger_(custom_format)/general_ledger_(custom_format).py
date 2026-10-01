@@ -53,6 +53,56 @@ def validate_custom_filters(filters, account_details):
 
 
 
+def get_filter_summary_html(filters):
+	account_html = ""
+	if filters.get("account"):
+		acc = filters.get("account")
+		acc_str = ", ".join(acc) if isinstance(acc, list) else str(acc)
+		if acc_str and acc_str.strip():
+			account_html = f'<div style="font-size: 20px; font-weight: 700; color: #1e293b; text-align: center; margin: 10px 0 12px; background: #e2e8f0; padding: 8px 22px; border-radius: 6px; border: 1px solid #cbd5e1; display: inline-block;">{acc_str}</div>'
+
+	other_parts = []
+	if filters.get("voucher_no"):
+		v_no = filters.get("voucher_no")
+		v_str = ", ".join(v_no) if isinstance(v_no, list) else str(v_no)
+		other_parts.append(f"<strong>{_('Voucher No')}:</strong> {v_str}")
+
+	if filters.get("against_voucher_no"):
+		avg_no = filters.get("against_voucher_no")
+		avg_str = ", ".join(avg_no) if isinstance(avg_no, list) else str(avg_no)
+		other_parts.append(f"<strong>{_('Against Voucher No')}:</strong> {avg_str}")
+
+	if filters.get("party"):
+		p_type = filters.get("party_type") or _("Party")
+		party = filters.get("party")
+		p_str = ", ".join(party) if isinstance(party, list) else str(party)
+		other_parts.append(f"<strong>{p_type}:</strong> {p_str}")
+
+	if filters.get("from_date") and filters.get("to_date"):
+		other_parts.append(
+			f"<strong>{_('Period')}:</strong> {filters.get('from_date')} {_('to')} {filters.get('to_date')}"
+		)
+
+	if filters.get("presentation_currency"):
+		other_parts.append(f"<strong>{_('Currency')}:</strong> {filters.get('presentation_currency')}")
+
+	details_html = ""
+	if other_parts:
+		details_str = " &nbsp;&nbsp;|&nbsp;&nbsp; ".join(other_parts)
+		details_html = f'<div style="font-size: 14px; color: #334155; margin-top: 6px; line-height: 1.6;">{details_str}</div>'
+
+	company_name = filters.get("company") or ""
+
+	return f'''
+	<div class="gl-custom-header-banner" style="text-align: center; padding: 16px 20px; margin-bottom: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+		<div style="font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: 0.5px;">{_("General Ledger")}</div>
+		<div style="font-size: 15px; font-weight: 600; color: #475569; margin-top: 2px;">{company_name}</div>
+		{account_html}
+		{details_html}
+	</div>
+	'''
+
+
 def execute(filters=None):
 	if not filters:
 		return [], []
@@ -82,8 +132,9 @@ def execute(filters=None):
 
 	columns = get_columns(filters)
 	res = get_custom_result(filters, account_details)
+	message = get_filter_summary_html(filters)
 
-	return columns, res
+	return columns, res, message
 
 
 def get_custom_result(filters, account_details):
