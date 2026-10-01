@@ -194,64 +194,38 @@ def get_columns(filters):
 			"width": 110,
 		},
 		{
-			"label": _("Invoice/Cheque No"),
-			"fieldname": "invoice_cheque_no",
+			"label": _("Party"),
+			"fieldname": "party",
 			"fieldtype": "Data",
 			"width": 160,
 		},
-	]
-
-	if should_show_account_column(filters):
-		columns.append(
-			{
-				"label": _("Account"),
-				"fieldname": "account",
-				"fieldtype": "Link",
-				"options": "Account",
-				"width": 180,
-			}
-		)
-
-	columns.extend(
-		[
-			{
-				"label": _("Description"),
-				"fieldname": "description",
-				"fieldtype": "Data",
-				"width": 220,
-			},
 		{
-			"label": _("Currency"),
-			"fieldname": "currency",
-			"fieldtype": "Data",
-			"width": 80,
+			"label": _("Voucher No"),
+			"fieldname": "voucher_no",
+			"fieldtype": "Dynamic Link",
+			"options": "voucher_type",
+			"width": 200,
 		},
 		{
 			"label": _("Dr"),
 			"fieldname": "debit",
 			"fieldtype": "Currency",
 			"options": "currency",
-			"width": 130,
+			"width": 150,
 		},
 		{
 			"label": _("Cr"),
 			"fieldname": "credit",
 			"fieldtype": "Currency",
 			"options": "currency",
-			"width": 130,
+			"width": 150,
 		},
 		{
 			"label": _("Balance"),
 			"fieldname": "balance",
 			"fieldtype": "Currency",
 			"options": "currency",
-			"width": 140,
-		},
-		{
-			"label": _("Remarks"),
-			"fieldname": "remarks",
-			"fieldtype": "Data",
-			"width": 260,
+			"width": 160,
 		},
 		{
 			"label": _("Voucher Type"),
@@ -260,13 +234,25 @@ def get_columns(filters):
 			"width": 140,
 		},
 		{
-			"label": _("Voucher No"),
-			"fieldname": "voucher_no",
-			"fieldtype": "Dynamic Link",
-			"options": "voucher_type",
-			"width": 160,
+			"label": _("Account"),
+			"fieldname": "account",
+			"fieldtype": "Link",
+			"options": "Account",
+			"width": 200,
 		},
-	])
+		{
+			"label": _("Against Account"),
+			"fieldname": "against",
+			"fieldtype": "Data",
+			"width": 200,
+		},
+		{
+			"label": _("Description"),
+			"fieldname": "description",
+			"fieldtype": "Data",
+			"width": 280,
+		},
+	]
 
 	return columns
 
@@ -543,6 +529,35 @@ def transform_to_custom_columns(raw_data, filters):
 	result = []
 	running_balance = 0.0
 
+def get_party_value(row, v_doc):
+	party = row.get("party_name") or row.get("party")
+	if party and str(party).strip():
+		return str(party).strip()
+	if v_doc:
+		return (
+			v_doc.get("party_name")
+			or v_doc.get("supplier_name")
+			or v_doc.get("customer_name")
+			or v_doc.get("employee_name")
+			or ""
+		)
+	return ""
+
+
+def transform_to_custom_columns(raw_data, filters):
+	labels = get_translated_labels_for_totals()
+	voucher_details_map = get_voucher_details_map(raw_data)
+
+	selected_currency = (
+		filters.get("presentation_currency")
+		or filters.get("account_currency")
+		or filters.get("company_currency")
+		or get_company_currency(filters.get("company") or get_default_company())
+	)
+
+	result = []
+	running_balance = 0.0
+
 	for row in raw_data:
 		acc = row.get("account")
 		is_entry = bool(row.get("posting_date"))
@@ -555,19 +570,21 @@ def transform_to_custom_columns(raw_data, filters):
 			if abs(closing_balance) < 1e-6:
 				closing_balance = 0.0
 
+			label = str(acc) if (acc and acc != labels["closing"]) else _("Closing (Opening + Total)")
+
 			result.append(
 				{
 					"posting_date": "",
-					"invoice_cheque_no": "",
-					"account": "",
-					"description": _("Closing (Opening + Total)"),
-					"currency": selected_currency,
+					"party": label,
+					"voucher_no": "",
 					"debit": dr if abs(dr) >= 1e-6 else None,
 					"credit": cr if abs(cr) >= 1e-6 else None,
 					"balance": closing_balance,
-					"remarks": "",
 					"voucher_type": "",
-					"voucher_no": "",
+					"account": "",
+					"against": "",
+					"description": "",
+					"currency": selected_currency,
 				}
 			)
 
@@ -577,19 +594,21 @@ def transform_to_custom_columns(raw_data, filters):
 		):
 			dr = round(flt(row.get("debit")), 4)
 			cr = round(flt(row.get("credit")), 4)
+			label = str(acc) if (acc and acc != labels["total"]) else _("Total")
+
 			result.append(
 				{
 					"posting_date": "",
-					"invoice_cheque_no": "",
-					"account": "",
-					"description": _("Total"),
-					"currency": selected_currency,
+					"party": label,
+					"voucher_no": "",
 					"debit": dr if abs(dr) >= 1e-6 else None,
 					"credit": cr if abs(cr) >= 1e-6 else None,
 					"balance": None,
-					"remarks": "",
 					"voucher_type": "",
-					"voucher_no": "",
+					"account": "",
+					"against": "",
+					"description": "",
+					"currency": selected_currency,
 				}
 			)
 
@@ -603,19 +622,21 @@ def transform_to_custom_columns(raw_data, filters):
 			if abs(running_balance) < 1e-6:
 				running_balance = 0.0
 
+			label = str(acc) if (acc and acc != labels["opening"]) else _("Opening Balance")
+
 			result.append(
 				{
 					"posting_date": filters.get("from_date"),
-					"invoice_cheque_no": "",
-					"account": "",
-					"description": _("Opening Balance"),
-					"currency": selected_currency,
+					"party": label,
+					"voucher_no": "",
 					"debit": dr if abs(dr) >= 1e-6 else None,
 					"credit": cr if abs(cr) >= 1e-6 else None,
 					"balance": running_balance,
-					"remarks": "",
 					"voucher_type": "",
-					"voucher_no": "",
+					"account": "",
+					"against": "",
+					"description": "",
+					"currency": selected_currency,
 				}
 			)
 
@@ -632,23 +653,23 @@ def transform_to_custom_columns(raw_data, filters):
 			if abs(rounded_balance) < 1e-6:
 				rounded_balance = 0.0
 
-			inv_no = get_invoice_cheque_no(row, v_doc)
+			party_val = get_party_value(row, v_doc)
 			desc = get_description(row, v_doc)
 			rmks = get_remarks(row, v_doc, desc)
 
 			result.append(
 				{
 					"posting_date": row.get("posting_date"),
-					"invoice_cheque_no": inv_no,
-					"account": acc or "",
-					"description": desc,
-					"currency": selected_currency,
+					"party": party_val,
+					"voucher_no": v_no,
 					"debit": dr if abs(dr) >= 1e-6 else None,
 					"credit": cr if abs(cr) >= 1e-6 else None,
 					"balance": rounded_balance,
-					"remarks": rmks,
 					"voucher_type": v_type,
-					"voucher_no": v_no,
+					"account": acc or "",
+					"against": row.get("against") or "",
+					"description": rmks or desc,
+					"currency": selected_currency,
 				}
 			)
 
@@ -657,16 +678,16 @@ def transform_to_custom_columns(raw_data, filters):
 			result.append(
 				{
 					"posting_date": "",
-					"invoice_cheque_no": "",
-					"account": "",
-					"description": "",
-					"currency": selected_currency,
+					"party": "",
+					"voucher_no": "",
 					"debit": None,
 					"credit": None,
 					"balance": None,
-					"remarks": "",
 					"voucher_type": "",
-					"voucher_no": "",
+					"account": "",
+					"against": "",
+					"description": "",
+					"currency": selected_currency,
 				}
 			)
 

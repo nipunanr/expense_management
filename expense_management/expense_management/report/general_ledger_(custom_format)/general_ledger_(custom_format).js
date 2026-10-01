@@ -87,13 +87,12 @@ frappe.query_reports["General Ledger (Custom Format)"] = frappe.query_reports["G
 			return "";
 		}
 
-		if (
+		let is_summary_row =
 			data &&
-			(data.description === __("Closing (Opening + Total)") ||
-				data.description === __("Total") ||
-				data.description === "Total" ||
-				data.description === "Closing (Opening + Total)")
-		) {
+			((data.party && (data.party.indexOf("Total") !== -1 || data.party.indexOf("Opening") !== -1 || data.party.indexOf("Closing") !== -1)) ||
+				(data.description && (data.description.indexOf("Total") !== -1 || data.description.indexOf("Opening") !== -1 || data.description.indexOf("Closing") !== -1)));
+
+		if (is_summary_row) {
 			value = $(`<span>${value}</span>`);
 			var $value = $(value).css("font-weight", "bold");
 			value = $value.wrap("<p></p>").parent().html();
