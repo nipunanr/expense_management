@@ -198,10 +198,11 @@ after_install = "expense_management.install.after_install"
 
 # Overriding Methods
 # ------------------------------
-#
-# override_whitelisted_methods = {
-# 	"frappe.desk.doctype.event.event.get_events": "expense_management.event.get_events"
-# }
+
+override_whitelisted_methods = {
+	"frappe.desk.query_report.get_script": "expense_management.overrides.get_script"
+}
+
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

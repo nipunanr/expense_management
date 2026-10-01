@@ -22,6 +22,12 @@ def validate_custom_filters(filters, account_details):
 	if not filters.get("company"):
 		frappe.throw(_("{0} is mandatory").format(_("Company")))
 
+	if filters.get("voucher_no") and (not filters.get("from_date") or not filters.get("to_date")):
+		v_date = frappe.db.get_value("GL Entry", {"voucher_no": filters.get("voucher_no")}, "posting_date")
+		if v_date:
+			filters.setdefault("from_date", v_date)
+			filters.setdefault("to_date", v_date)
+
 	if not filters.get("from_date") and not filters.get("to_date"):
 		frappe.throw(
 			_("{0} and {1} are mandatory").format(frappe.bold(_("From Date")), frappe.bold(_("To Date")))
@@ -44,6 +50,7 @@ def validate_custom_filters(filters, account_details):
 	if filters.get("from_date") and filters.get("to_date"):
 		if getdate(filters.from_date) > getdate(filters.to_date):
 			frappe.throw(_("From Date must be before To Date"))
+
 
 
 def execute(filters=None):
@@ -99,6 +106,16 @@ def get_custom_result(filters, account_details):
 	return result
 
 
+def should_show_account_column(filters):
+	if filters.get("voucher_no"):
+		account = filters.get("account")
+		if not account:
+			return True
+		if isinstance(account, list) and len(account) == 0:
+			return True
+	return False
+
+
 def get_columns(filters):
 	if filters.get("presentation_currency"):
 		currency = filters["presentation_currency"]
@@ -131,12 +148,27 @@ def get_columns(filters):
 			"fieldtype": "Data",
 			"width": 160,
 		},
-		{
-			"label": _("Description"),
-			"fieldname": "description",
-			"fieldtype": "Data",
-			"width": 220,
-		},
+	]
+
+	if should_show_account_column(filters):
+		columns.append(
+			{
+				"label": _("Account"),
+				"fieldname": "account",
+				"fieldtype": "Link",
+				"options": "Account",
+				"width": 180,
+			}
+		)
+
+	columns.extend(
+		[
+			{
+				"label": _("Description"),
+				"fieldname": "description",
+				"fieldtype": "Data",
+				"width": 220,
+			},
 		{
 			"label": _("Currency"),
 			"fieldname": "currency",
@@ -183,7 +215,7 @@ def get_columns(filters):
 			"options": "voucher_type",
 			"width": 160,
 		},
-	]
+	])
 
 	return columns
 
@@ -476,6 +508,7 @@ def transform_to_custom_columns(raw_data, filters):
 				{
 					"posting_date": "",
 					"invoice_cheque_no": "",
+					"account": "",
 					"description": _("Closing (Opening + Total)"),
 					"currency": selected_currency,
 					"debit": dr if abs(dr) >= 1e-6 else None,
@@ -497,6 +530,7 @@ def transform_to_custom_columns(raw_data, filters):
 				{
 					"posting_date": "",
 					"invoice_cheque_no": "",
+					"account": "",
 					"description": _("Total"),
 					"currency": selected_currency,
 					"debit": dr if abs(dr) >= 1e-6 else None,
@@ -522,6 +556,7 @@ def transform_to_custom_columns(raw_data, filters):
 				{
 					"posting_date": filters.get("from_date"),
 					"invoice_cheque_no": "",
+					"account": "",
 					"description": _("Opening Balance"),
 					"currency": selected_currency,
 					"debit": dr if abs(dr) >= 1e-6 else None,
@@ -554,6 +589,7 @@ def transform_to_custom_columns(raw_data, filters):
 				{
 					"posting_date": row.get("posting_date"),
 					"invoice_cheque_no": inv_no,
+					"account": acc or "",
 					"description": desc,
 					"currency": selected_currency,
 					"debit": dr if abs(dr) >= 1e-6 else None,
@@ -571,6 +607,7 @@ def transform_to_custom_columns(raw_data, filters):
 				{
 					"posting_date": "",
 					"invoice_cheque_no": "",
+					"account": "",
 					"description": "",
 					"currency": selected_currency,
 					"debit": None,
