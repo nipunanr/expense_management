@@ -327,7 +327,18 @@ def get_voucher_details_map(raw_data):
 				filters={"name": ["in", exp_names]},
 				fields=["name", "description", "remarks"],
 			)
+			
+			exp_items = frappe.get_all(
+				"Expense Item",
+				filters={"parent": ["in", exp_names]},
+				fields=["parent", "expense_account", "expense_type", "description"]
+			)
+			items_map = {}
+			for item in exp_items:
+				items_map.setdefault(item.parent, []).append(item)
+
 			for exp in exp_rows:
+				exp["items"] = items_map.get(exp.name, [])
 				voucher_details[("Expense", exp.name)] = exp
 		except Exception:
 			pass
@@ -417,6 +428,18 @@ def get_description(row, v_doc):
 			return str(user_rmk).strip()
 		return row.get("against") or _("Journal Entry")
 	elif v_type == "Expense":
+		dr = flt(row.get("debit"))
+		if dr > 0 and v_doc:
+			acc = row.get("account")
+			items = v_doc.get("items", [])
+			descs = []
+			for it in items:
+				if it.expense_account == acc and it.description:
+					if it.description not in descs:
+						descs.append(it.description)
+			if descs:
+				return ", ".join(descs)
+		
 		exp_desc = v_doc.get("description") if v_doc else None
 		if exp_desc and str(exp_desc).strip():
 			return str(exp_desc).strip()
@@ -436,6 +459,19 @@ def get_description(row, v_doc):
 
 
 def get_remarks(row, v_doc, desc):
+	if row.get("voucher_type") == "Expense":
+		dr = flt(row.get("debit"))
+		if dr > 0 and v_doc:
+			acc = row.get("account")
+			items = v_doc.get("items", [])
+			descs = []
+			for it in items:
+				if it.expense_account == acc and it.description:
+					if it.description not in descs:
+						descs.append(it.description)
+			if descs:
+				return ", ".join(descs)
+
 	raw_remarks = row.get("remarks")
 	if (
 		raw_remarks is None
@@ -530,6 +566,24 @@ def transform_to_custom_columns(raw_data, filters):
 	running_balance = 0.0
 
 def get_party_value(row, v_doc):
+	if row.get("voucher_type") == "Expense" and v_doc:
+		dr = flt(row.get("debit"))
+		cr = flt(row.get("credit"))
+		if dr > 0:
+			acc = row.get("account")
+			items = v_doc.get("items", [])
+			expense_types = []
+			for it in items:
+				if it.expense_account == acc and it.expense_type:
+					if it.expense_type not in expense_types:
+						expense_types.append(it.expense_type)
+			if expense_types:
+				return ", ".join(expense_types)
+		elif cr > 0:
+			exp_desc = v_doc.get("description")
+			if exp_desc and str(exp_desc).strip():
+				return str(exp_desc).strip()
+
 	party = row.get("party_name") or row.get("party")
 	if party and str(party).strip():
 		return str(party).strip()
