@@ -428,18 +428,6 @@ def get_description(row, v_doc):
 			return str(user_rmk).strip()
 		return row.get("against") or _("Journal Entry")
 	elif v_type == "Expense":
-		dr = flt(row.get("debit"))
-		if dr > 0 and v_doc:
-			acc = row.get("account")
-			items = v_doc.get("items", [])
-			descs = []
-			for it in items:
-				if it.expense_account == acc and it.description:
-					if it.description not in descs:
-						descs.append(it.description)
-			if descs:
-				return ", ".join(descs)
-		
 		exp_desc = v_doc.get("description") if v_doc else None
 		if exp_desc and str(exp_desc).strip():
 			return str(exp_desc).strip()
@@ -459,18 +447,11 @@ def get_description(row, v_doc):
 
 
 def get_remarks(row, v_doc, desc):
+	# Expense: show the main Expense description on both Dr and Cr rows, not the item descriptions
 	if row.get("voucher_type") == "Expense":
-		dr = flt(row.get("debit"))
-		if dr > 0 and v_doc:
-			acc = row.get("account")
-			items = v_doc.get("items", [])
-			descs = []
-			for it in items:
-				if it.expense_account == acc and it.description:
-					if it.description not in descs:
-						descs.append(it.description)
-			if descs:
-				return ", ".join(descs)
+		exp_desc = v_doc.get("description") if v_doc else None
+		if exp_desc and str(exp_desc).strip():
+			return str(exp_desc).strip()
 
 	raw_remarks = row.get("remarks")
 	if (
