@@ -813,10 +813,11 @@ def get_party_value(row, v_doc):
 						expense_types.append(it.expense_type)
 			if expense_types:
 				return ", ".join(expense_types)
-		elif cr > 0:
-			exp_desc = v_doc.get("description")
-			if exp_desc and str(exp_desc).strip():
-				return str(exp_desc).strip()
+
+		# Cr row, or a Dr row whose items have no Expense Type (it is optional): main description
+		exp_desc = v_doc.get("description")
+		if exp_desc and str(exp_desc).strip():
+			return str(exp_desc).strip()
 
 	party = row.get("party_name") or row.get("party")
 	if not party and row.get("voucher_type") == "Stock Entry" and v_doc and v_doc.get("issue_items"):
