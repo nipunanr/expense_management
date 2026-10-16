@@ -98,6 +98,90 @@ frappe.query_reports["General Ledger (Custom Format)"] = frappe.query_reports["G
 			value = $value.wrap("<p></p>").parent().html();
 		}
 
+		if (data && data.issue_detail && column.fieldname === "description") {
+			value = `<span class="gl-issue-detail-link" title="${__("Click to view issue details")}"
+				style="cursor: pointer; text-decoration: underline dotted;">${value}</span>`;
+		}
+
 		return value;
 	},
+	after_datatable_render: function (datatable) {
+		// Clicking a Material Issue row opens the full shipment / item / supplier detail
+		$(datatable.bodyScrollable)
+			.off("click.gl-issue-detail")
+			.on("click.gl-issue-detail", ".dt-row", function (e) {
+				if ($(e.target).closest("a").length) return;
+				const row_index = $(this).attr("data-row-index");
+				const row = row_index != null ? datatable.datamanager.getData(row_index) : null;
+				if (row && row.issue_detail) {
+					show_gl_issue_detail(row);
+				}
+			});
+	},
 };
+
+function show_gl_issue_detail(row) {
+	const d = row.issue_detail;
+	const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
+	const link = (doctype, name) =>
+		name ? `<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}" target="_blank">${esc(name)}</a>` : "";
+
+	const fields = [
+		[__("Stock Entry"), link("Stock Entry", d.stock_entry)],
+		[__("Stock Entry Type"), esc(d.stock_entry_type)],
+		[__("Purpose of Issue"), esc(d.purpose_of_issue)],
+		[__("Reference No"), esc(d.reference_no)],
+		[__("Shipment (Customer Order)"), link("Customer Order", d.customer_order)],
+		[__("Customer"), d.customer ? `${link("Customer", d.customer)}${d.customer_name && d.customer_name !== d.customer ? " - " + esc(d.customer_name) : ""}` : ""],
+		[__("Customer Batch"), esc(d.customer_batch)],
+		[__("Invoice No"), esc(d.invoice_no)],
+		[__("Packing Plan"), link("Packing Plan", d.packing_plan)],
+		[__("Work Order"), link("Work Order", d.work_order)],
+		[__("Remarks"), esc(d.remarks)],
+	].filter(([, v]) => v);
+
+	const header_html = fields
+		.map(
+			([label, v]) => `<div class="col-sm-6" style="margin-bottom: 8px;">
+				<div class="text-muted small">${label}</div><div>${v}</div></div>`
+		)
+		.join("");
+
+	const has_other_rows = d.items.some((it) => !it.in_row);
+	const items_html = d.items
+		.map((it) => {
+			const suppliers = (it.suppliers || [])
+				.map((s, i) => link("Supplier", s) + (it.supplier_names[i] && it.supplier_names[i] !== s ? ` - ${esc(it.supplier_names[i])}` : ""))
+				.join("<br>");
+			const batches = (it.batches || []).map((b) => link("Batch", b)).join("<br>");
+			return `<tr style="${has_other_rows && !it.in_row ? "opacity: 0.55;" : ""}">
+				<td>${link("Item", it.item_code)}${it.item_name && it.item_name !== it.item_code ? `<div class="small text-muted">${esc(it.item_name)}</div>` : ""}</td>
+				<td class="text-right">${esc(format_number(it.qty, null, Number.isInteger(it.qty) ? 0 : 3))} ${esc(it.uom)}</td>
+				<td>${batches}</td>
+				<td>${suppliers || `<span class="text-muted">${__("Not found")}</span>`}</td>
+				<td>${esc(it.warehouse)}</td>
+				<td>${esc(it.expense_account)}</td>
+			</tr>`;
+		})
+		.join("");
+
+	const dialog = new frappe.ui.Dialog({
+		title: __("Material Issue {0}", [d.stock_entry]),
+		size: "extra-large",
+		fields: [{ fieldtype: "HTML", fieldname: "detail" }],
+	});
+	dialog.fields_dict.detail.$wrapper.html(`
+		<div class="row">${header_html}</div>
+		<div class="table-responsive" style="margin-top: 8px;">
+			<table class="table table-bordered table-sm">
+				<thead><tr>
+					<th>${__("Item")}</th><th class="text-right">${__("Qty")}</th><th>${__("Batch")}</th>
+					<th>${__("Supplier")}</th><th>${__("Source Warehouse")}</th><th>${__("Expense Account")}</th>
+				</tr></thead>
+				<tbody>${items_html}</tbody>
+			</table>
+		</div>
+		${has_other_rows ? `<div class="small text-muted">${__("Faded items are posted to another account of this voucher, not to {0}.", [esc(d.account)])}</div>` : ""}
+	`);
+	dialog.show();
+}

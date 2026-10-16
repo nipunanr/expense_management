@@ -615,35 +615,50 @@ def get_issue_items_for_row(row, v_doc):
 
 
 def get_stock_issue_description(row, v_doc):
-	shipment = []
-	if v_doc.get("customer_order"):
-		shipment.append(_("Shipment: {0}").format(v_doc.customer_order))
-	elif v_doc.get("shipment_ref"):
-		shipment.append(_("Shipment Ref: {0}").format(v_doc.shipment_ref))
-	if v_doc.get("shipment_customer_name"):
-		shipment.append(v_doc.shipment_customer_name)
-	if v_doc.get("customer_batch"):
-		shipment.append(_("Batch {0}").format(v_doc.customer_batch))
-	if v_doc.get("shipment_invoice_no"):
-		shipment.append(_("Inv {0}").format(v_doc.shipment_invoice_no))
-
+	"""Purpose of Issue - Reference No (falls back to the Stock Entry Type for the other issue types)."""
 	heading = v_doc.get("purpose_of_issue") or v_doc.get("stock_entry_type") or v_doc.get("purpose")
-	parts = [" - ".join(filter(None, [heading, " · ".join(shipment)]))]
+	reference = (v_doc.get("custom_reference_no") or "").strip() if v_doc.get("purpose_of_issue") else ""
+	return " - ".join(filter(None, [heading, reference]))
 
-	item_texts = []
-	for it in get_issue_items_for_row(row, v_doc):
-		text = f"{it.item_name or it.item_code} × {flt(it.qty):g} {it.uom or ''}".strip()
-		if it.supplier_names:
-			text += f" [{', '.join(it.supplier_names)}]"
-		item_texts.append(text)
-	if item_texts:
-		parts.append(_("Items: {0}").format("; ".join(item_texts)))
 
+def get_stock_issue_detail(row, v_doc):
+	"""Full Material Issue detail for the row-click dialog."""
+	row_items = get_issue_items_for_row(row, v_doc)
 	remarks = (v_doc.get("remarks") or "").strip()
-	if remarks and remarks.lower() not in ["no remarks", "no remark", "none", "null"]:
-		parts.append(remarks)
+	if remarks.lower() in ["no remarks", "no remark", "none", "null"]:
+		remarks = ""
 
-	return " | ".join(filter(None, parts))
+	return {
+		"stock_entry": v_doc.name,
+		"stock_entry_type": v_doc.get("stock_entry_type"),
+		"purpose_of_issue": v_doc.get("purpose_of_issue"),
+		"reference_no": v_doc.get("custom_reference_no") if v_doc.get("purpose_of_issue") else None,
+		"customer_order": v_doc.get("customer_order"),
+		"shipment_ref": v_doc.get("shipment_ref"),
+		"customer": v_doc.get("shipment_customer"),
+		"customer_name": v_doc.get("shipment_customer_name"),
+		"customer_batch": v_doc.get("customer_batch"),
+		"invoice_no": v_doc.get("shipment_invoice_no"),
+		"packing_plan": v_doc.get("custom_packing_plan"),
+		"work_order": v_doc.get("work_order"),
+		"remarks": remarks,
+		"account": row.get("account"),
+		"items": [
+			{
+				"item_code": it.item_code,
+				"item_name": it.item_name,
+				"qty": flt(it.qty),
+				"uom": it.uom,
+				"warehouse": it.s_warehouse,
+				"expense_account": it.expense_account,
+				"batches": it.batches,
+				"suppliers": it.suppliers,
+				"supplier_names": it.supplier_names,
+				"in_row": it in row_items,
+			}
+			for it in v_doc.get("issue_items") or []
+		],
+	}
 
 
 def get_invoice_cheque_no(row, v_doc):
@@ -992,6 +1007,9 @@ def transform_to_custom_columns(raw_data, filters):
 					"against": row.get("against") or "",
 					"description": rmks or desc,
 					"currency": selected_currency,
+					"issue_detail": get_stock_issue_detail(row, v_doc)
+					if v_type == "Stock Entry" and v_doc.get("issue_items")
+					else None,
 				}
 			)
 
