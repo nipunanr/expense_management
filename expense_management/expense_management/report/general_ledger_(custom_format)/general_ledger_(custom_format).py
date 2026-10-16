@@ -257,7 +257,7 @@ def get_columns(filters):
 	return columns
 
 
-def get_voucher_details_map(raw_data):
+def get_voucher_details_map(raw_data, company=None):
 	vouchers_by_type = {}
 	for row in raw_data:
 		v_type = row.get("voucher_type")
@@ -359,17 +359,291 @@ def get_voucher_details_map(raw_data):
 	# 7. Stock Entry
 	if se_names := list(vouchers_by_type.get("Stock Entry", [])):
 		try:
-			se_rows = frappe.get_all(
-				"Stock Entry",
-				filters={"name": ["in", se_names]},
-				fields=["name", "purpose", "remarks"],
-			)
-			for se in se_rows:
+			for se in get_stock_entry_details(se_names, company):
 				voucher_details[("Stock Entry", se.name)] = se
 		except Exception:
-			pass
+			frappe.log_error(frappe.get_traceback(), "General Ledger (Custom Format): Stock Entry details")
 
 	return voucher_details
+
+
+def get_stock_entry_details(se_names, company=None):
+	"""Stock Entry header + for Material Issues: issued items, their supplier and the shipment."""
+	se_meta = frappe.get_meta("Stock Entry")
+	optional_fields = [
+		f
+		for f in ("custom_purpose_of_issue", "custom_reference_no", "custom_customer", "custom_packing_plan")
+		if se_meta.has_field(f)
+	]
+	se_rows = frappe.get_all(
+		"Stock Entry",
+		filters={"name": ["in", se_names]},
+		fields=["name", "purpose", "stock_entry_type", "remarks", "posting_date", "posting_time", "work_order"]
+		+ optional_fields,
+	)
+
+	issue_entries = {se.name: se for se in se_rows if se.purpose == "Material Issue"}
+	if not issue_entries:
+		return se_rows
+
+	items = frappe.get_all(
+		"Stock Entry Detail",
+		filters={"parent": ["in", list(issue_entries)], "parenttype": "Stock Entry"},
+		fields=[
+			"parent",
+			"item_code",
+			"item_name",
+			"qty",
+			"uom",
+			"s_warehouse",
+			"expense_account",
+			"batch_no",
+			"serial_and_batch_bundle",
+		],
+		order_by="parent, idx",
+	)
+
+	set_item_batches(items)
+	set_item_suppliers(items, issue_entries, company)
+
+	warehouse_account = {}
+	if company:
+		from erpnext.stock import get_warehouse_account_map
+
+		warehouse_account = {wh: d.account for wh, d in get_warehouse_account_map(company).items()}
+
+	for it in items:
+		it.stock_account = warehouse_account.get(it.s_warehouse)
+		issue_entries[it.parent].setdefault("issue_items", []).append(it)
+
+	set_shipment_details(issue_entries)
+	return se_rows
+
+
+def set_item_batches(items):
+	bundles = [it.serial_and_batch_bundle for it in items if it.serial_and_batch_bundle]
+	bundle_batches = {}
+	if bundles:
+		for entry in frappe.get_all(
+			"Serial and Batch Entry",
+			filters={"parent": ["in", bundles], "batch_no": ["is", "set"]},
+			fields=["parent", "batch_no"],
+			order_by="parent, idx",
+		):
+			bundle_batches.setdefault(entry.parent, []).append(entry.batch_no)
+
+	for it in items:
+		batches = bundle_batches.get(it.serial_and_batch_bundle) or ([it.batch_no] if it.batch_no else [])
+		it.batches = list(dict.fromkeys(batches))
+
+
+def get_batch_supplier_map(batch_nos):
+	"""Batch -> Supplier, from Batch.supplier, the purchase document that created it, or the Fish GRN."""
+	batch_supplier = {}
+	if not batch_nos:
+		return batch_supplier
+
+	purchase_refs = {}
+	for b in frappe.get_all(
+		"Batch",
+		filters={"name": ["in", batch_nos]},
+		fields=["name", "supplier", "reference_doctype", "reference_name"],
+	):
+		if b.supplier:
+			batch_supplier[b.name] = b.supplier
+		elif b.reference_doctype in ("Purchase Receipt", "Purchase Invoice") and b.reference_name:
+			purchase_refs.setdefault(b.reference_doctype, {}).setdefault(b.reference_name, []).append(b.name)
+
+	for doctype, refs in purchase_refs.items():
+		for doc in frappe.get_all(doctype, filters={"name": ["in", list(refs)]}, fields=["name", "supplier"]):
+			if doc.supplier:
+				for batch_no in refs[doc.name]:
+					batch_supplier[batch_no] = doc.supplier
+
+	# Raw fish batches are created by a Fish Receiving Stock Entry; the supplier lives on the Fish GRN
+	pending = [b for b in batch_nos if b not in batch_supplier]
+	if pending and frappe.db.table_exists("Fish GRN Details") and frappe.db.table_exists("Fish GRN"):
+		for d in frappe.db.sql(
+			"""
+			select d.batch_number, g.supplier
+			from `tabFish GRN Details` d
+			inner join `tabFish GRN` g on g.name = d.parent
+			where d.batch_number in %(batches)s and ifnull(g.supplier, '') != ''
+			""",
+			{"batches": pending},
+			as_dict=1,
+		):
+			batch_supplier.setdefault(d.batch_number, d.supplier)
+
+	return batch_supplier
+
+
+def get_last_purchase_supplier(item_code, warehouse, posting_datetime, company, cache):
+	"""Supplier of the latest purchase receipt of the item on or before the issue (same warehouse first)."""
+	key = (item_code, warehouse, posting_datetime)
+	if key in cache:
+		return cache[key]
+
+	supplier = None
+	for wh in (warehouse, None) if warehouse else (None,):
+		wh_condition = "and warehouse = %(warehouse)s" if wh else ""
+		last = frappe.db.sql(
+			f"""
+			select voucher_type, voucher_no
+			from `tabStock Ledger Entry`
+			where item_code = %(item_code)s {wh_condition}
+				and voucher_type in ('Purchase Receipt', 'Purchase Invoice')
+				and actual_qty > 0 and is_cancelled = 0
+				and posting_datetime <= %(posting_datetime)s
+			order by posting_datetime desc, creation desc
+			limit 1
+			""",
+			{"item_code": item_code, "warehouse": wh, "posting_datetime": posting_datetime},
+			as_dict=1,
+		)
+		if last:
+			supplier = frappe.db.get_value(last[0].voucher_type, last[0].voucher_no, "supplier")
+			if supplier:
+				break
+
+	if not supplier and company:
+		supplier = frappe.db.get_value(
+			"Item Default", {"parent": item_code, "company": company}, "default_supplier"
+		)
+
+	cache[key] = supplier
+	return supplier
+
+
+def set_item_suppliers(items, issue_entries, company):
+	from erpnext.stock.utils import get_combine_datetime
+
+	batch_supplier = get_batch_supplier_map(list({b for it in items for b in it.batches}))
+
+	cache = {}
+	for it in items:
+		suppliers = [batch_supplier[b] for b in it.batches if batch_supplier.get(b)]
+		if not suppliers:
+			se = issue_entries[it.parent]
+			posting_datetime = get_combine_datetime(se.posting_date, se.posting_time)
+			if supplier := get_last_purchase_supplier(
+				it.item_code, it.s_warehouse, posting_datetime, company, cache
+			):
+				suppliers = [supplier]
+		it.suppliers = list(dict.fromkeys(suppliers))
+
+	supplier_ids = list({s for it in items for s in it.suppliers})
+	supplier_names = {}
+	if supplier_ids:
+		supplier_names = dict(
+			frappe.get_all(
+				"Supplier", filters={"name": ["in", supplier_ids]}, fields=["name", "supplier_name"], as_list=1
+			)
+		)
+	for it in items:
+		it.supplier_names = [supplier_names.get(s) or s for s in it.suppliers]
+
+
+def set_shipment_details(issue_entries):
+	"""Resolve the shipment (Customer Order) a Material Issue belongs to."""
+	entries = list(issue_entries.values())
+	has_customer_order = frappe.db.table_exists("Customer Order")
+
+	def get_map(doctype, names, fields):
+		names = list({n for n in names if n})
+		if not names or not frappe.db.table_exists(doctype):
+			return {}
+		meta = frappe.get_meta(doctype)
+		fields = [f for f in fields if meta.has_field(f)]
+		return {
+			d.name: d for d in frappe.get_all(doctype, filters={"name": ["in", names]}, fields=["name", *fields])
+		}
+
+	packing_plans = get_map(
+		"Packing Plan", [se.get("custom_packing_plan") for se in entries], ["customer_order", "customer", "customer_batch"]
+	)
+	work_orders = get_map(
+		"Work Order", [se.work_order for se in entries], ["customer_order", "customer", "customer_batch"]
+	)
+
+	for se in entries:
+		source = packing_plans.get(se.get("custom_packing_plan")) or work_orders.get(se.work_order) or {}
+		se.customer_order = source.get("customer_order")
+		se.shipment_customer = source.get("customer") or se.get("custom_customer")
+		se.customer_batch = source.get("customer_batch")
+
+		# Purpose of Issue / Reference No are only shown (and kept meaningful) on the plain Material Issue type
+		se.purpose_of_issue = se.get("custom_purpose_of_issue") if se.stock_entry_type == "Material Issue" else None
+		ref = (se.get("custom_reference_no") or "").strip() if se.stock_entry_type == "Material Issue" else ""
+		if not se.customer_order and ref and has_customer_order and frappe.db.exists("Customer Order", ref):
+			se.customer_order = ref
+		elif not se.customer_order and se.purpose_of_issue == "Issue to Shipment":
+			se.shipment_ref = ref
+
+	customer_orders = get_map(
+		"Customer Order",
+		[se.customer_order for se in entries],
+		["customer", "customer_batch", "custom_invoice_number"],
+	)
+	for se in entries:
+		if co := customer_orders.get(se.customer_order):
+			se.shipment_customer = co.get("customer") or se.shipment_customer
+			se.customer_batch = co.get("customer_batch") or se.customer_batch
+			se.shipment_invoice_no = co.get("custom_invoice_number")
+
+	customers = list({se.shipment_customer for se in entries if se.shipment_customer})
+	customer_names = {}
+	if customers:
+		customer_names = dict(
+			frappe.get_all(
+				"Customer", filters={"name": ["in", customers]}, fields=["name", "customer_name"], as_list=1
+			)
+		)
+	for se in entries:
+		se.shipment_customer_name = customer_names.get(se.shipment_customer) or se.shipment_customer
+
+
+def get_issue_items_for_row(row, v_doc):
+	"""Issued items that belong to this GL row (Dr = item expense account, Cr = source warehouse account)."""
+	items = v_doc.get("issue_items") or []
+	acc = row.get("account")
+	if flt(row.get("debit")) > 0:
+		matched = [it for it in items if it.expense_account == acc]
+	else:
+		matched = [it for it in items if it.stock_account == acc]
+	return matched or items
+
+
+def get_stock_issue_description(row, v_doc):
+	shipment = []
+	if v_doc.get("customer_order"):
+		shipment.append(_("Shipment: {0}").format(v_doc.customer_order))
+	elif v_doc.get("shipment_ref"):
+		shipment.append(_("Shipment Ref: {0}").format(v_doc.shipment_ref))
+	if v_doc.get("shipment_customer_name"):
+		shipment.append(v_doc.shipment_customer_name)
+	if v_doc.get("customer_batch"):
+		shipment.append(_("Batch {0}").format(v_doc.customer_batch))
+	if v_doc.get("shipment_invoice_no"):
+		shipment.append(_("Inv {0}").format(v_doc.shipment_invoice_no))
+
+	heading = v_doc.get("purpose_of_issue") or v_doc.get("stock_entry_type") or v_doc.get("purpose")
+	parts = [" - ".join(filter(None, [heading, " · ".join(shipment)]))]
+
+	item_texts = []
+	for it in get_issue_items_for_row(row, v_doc):
+		text = f"{it.item_name or it.item_code} × {flt(it.qty):g} {it.uom or ''}".strip()
+		if it.supplier_names:
+			text += f" [{', '.join(it.supplier_names)}]"
+		item_texts.append(text)
+	if item_texts:
+		parts.append(_("Items: {0}").format("; ".join(item_texts)))
+
+	remarks = (v_doc.get("remarks") or "").strip()
+	if remarks and remarks.lower() not in ["no remarks", "no remark", "none", "null"]:
+		parts.append(remarks)
+
+	return " | ".join(filter(None, parts))
 
 
 def get_invoice_cheque_no(row, v_doc):
@@ -452,6 +726,10 @@ def get_remarks(row, v_doc, desc):
 		exp_desc = v_doc.get("description") if v_doc else None
 		if exp_desc and str(exp_desc).strip():
 			return str(exp_desc).strip()
+
+	# Material Issue: shipment, issued items and their supplier
+	if row.get("voucher_type") == "Stock Entry" and v_doc and v_doc.get("issue_items"):
+		return get_stock_issue_description(row, v_doc)
 
 	raw_remarks = row.get("remarks")
 	if (
@@ -566,6 +844,15 @@ def get_party_value(row, v_doc):
 				return str(exp_desc).strip()
 
 	party = row.get("party_name") or row.get("party")
+	if not party and row.get("voucher_type") == "Stock Entry" and v_doc and v_doc.get("issue_items"):
+		suppliers = []
+		for it in get_issue_items_for_row(row, v_doc):
+			for s in it.supplier_names:
+				if s not in suppliers:
+					suppliers.append(s)
+		if suppliers:
+			return ", ".join(suppliers)
+
 	if party and str(party).strip():
 		return str(party).strip()
 	if v_doc:
@@ -581,7 +868,7 @@ def get_party_value(row, v_doc):
 
 def transform_to_custom_columns(raw_data, filters):
 	labels = get_translated_labels_for_totals()
-	voucher_details_map = get_voucher_details_map(raw_data)
+	voucher_details_map = get_voucher_details_map(raw_data, filters.get("company"))
 
 	selected_currency = (
 		filters.get("presentation_currency")
