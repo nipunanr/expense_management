@@ -135,69 +135,190 @@ function show_gl_row_detail(row) {
 	});
 }
 
+const GL_RD_STYLE = `
+.gl-rd { color: var(--text-color); font-size: var(--text-base); }
+.gl-rd a { color: inherit; text-decoration: underline; text-decoration-color: var(--border-color); text-underline-offset: 3px; }
+.gl-rd a:hover { text-decoration-color: currentColor; }
+.gl-rd .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+
+.gl-rd-line { display: grid; grid-template-columns: 1fr auto; gap: 4px 24px; align-items: start;
+	padding: 16px 18px; border-radius: var(--radius-5); background: var(--subtle-fg); margin-bottom: 20px; }
+.gl-rd-line__account { font-size: var(--text-lg); font-weight: 600; line-height: 1.35; }
+.gl-rd-line__party { margin-top: 2px; }
+.gl-rd-line__desc { margin-top: 6px; color: var(--text-muted); max-width: 70ch; }
+.gl-rd-line__amount { text-align: right; }
+.gl-rd-line__value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+.gl-rd-line__meta { display: flex; gap: 6px; justify-content: flex-end; margin-bottom: 6px; }
+
+.gl-rd-tag { display: inline-block; padding: 1px 8px; border-radius: var(--radius-full); font-size: var(--text-sm); font-weight: 500; line-height: 20px; }
+.gl-rd-tag[data-color="blue"] { background: var(--bg-blue); color: var(--text-on-blue); }
+.gl-rd-tag[data-color="orange"] { background: var(--bg-orange); color: var(--text-on-orange); }
+.gl-rd-tag[data-color="green"] { background: var(--bg-green); color: var(--text-on-green); }
+.gl-rd-tag[data-color="red"] { background: var(--bg-red); color: var(--text-on-red); }
+.gl-rd-tag[data-color="gray"] { background: var(--bg-gray); color: var(--text-on-gray); }
+
+.gl-rd-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px 40px; margin-bottom: 8px; }
+.gl-rd-group h5, .gl-rd-tables h5 { font-size: var(--text-base); font-weight: 600; margin: 0 0 8px; color: var(--text-color); }
+.gl-rd-group { margin-bottom: 16px; }
+.gl-rd-dl { display: grid; grid-template-columns: minmax(120px, 40%) 1fr; margin: 0; }
+.gl-rd-dl dt, .gl-rd-dl dd { padding: 6px 0; border-bottom: 1px solid var(--border-color); margin: 0; }
+.gl-rd-dl dt { color: var(--text-muted); font-weight: 400; padding-right: 12px; }
+.gl-rd-dl dd { overflow-wrap: anywhere; }
+.gl-rd-dl dd.num { text-align: left; }
+.gl-rd-notes { white-space: pre-line; max-width: 80ch; color: var(--text-color); margin: 0 0 20px; }
+
+.gl-rd-tabs { display: flex; gap: 20px; box-shadow: inset 0 -1px 0 var(--border-color); overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; }
+.gl-rd-tab { background: none; border: 0; padding: 10px 0 9px; color: var(--text-light); white-space: nowrap;
+	border-bottom: 2px solid transparent; display: inline-flex; align-items: center; gap: 6px; }
+.gl-rd-tab:hover { color: var(--text-color); }
+.gl-rd-tab[aria-selected="true"] { color: var(--text-color); border-bottom-color: var(--text-color); font-weight: 500; }
+.gl-rd-tab:focus-visible { outline: 2px solid var(--text-color); outline-offset: 2px; border-radius: var(--radius-1); }
+.gl-rd-count { font-size: var(--text-xs); color: var(--text-muted); background: var(--subtle-fg); border-radius: var(--radius-full); padding: 0 6px; line-height: 18px; }
+
+.gl-rd-panel { max-height: 46vh; overflow: auto; border: 1px solid var(--border-color); border-top: 0; border-radius: 0 0 var(--radius-4) var(--radius-4); }
+.gl-rd-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--text-sm); }
+.gl-rd-table th { position: sticky; top: 0; z-index: 1; background: var(--subtle-accent); color: var(--text-muted);
+	font-weight: 500; text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
+.gl-rd-table td { padding: 8px 12px; border-bottom: 1px solid var(--border-color); vertical-align: top; }
+.gl-rd-table tbody tr:last-child td { border-bottom: 0; }
+.gl-rd-table tr.is-line td { background: var(--bg-blue); }
+.gl-rd-table tr.is-line td:first-child { box-shadow: inset 3px 0 0 var(--text-on-blue); }
+.gl-rd-table tfoot td { position: sticky; bottom: 0; background: var(--subtle-accent); font-weight: 600; border-top: 1px solid var(--border-color); border-bottom: 0; }
+.gl-rd-legend { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: var(--text-sm); color: var(--text-muted); }
+.gl-rd-legend i { width: 10px; height: 10px; border-radius: 2px; background: var(--bg-blue); box-shadow: inset 2px 0 0 var(--text-on-blue); display: inline-block; }
+.gl-rd-more { padding: 8px 12px; font-size: var(--text-sm); color: var(--text-muted); }
+
+@media (max-width: 640px) {
+	.gl-rd-line { grid-template-columns: 1fr; }
+	.gl-rd-line__amount { text-align: left; order: -1; }
+	.gl-rd-line__meta { justify-content: flex-start; }
+	.gl-rd-dl { grid-template-columns: 1fr; }
+	.gl-rd-dl dt { border-bottom: 0; padding-bottom: 0; }
+}
+`;
+
 function render_gl_row_detail(d, row) {
+	if (!document.getElementById("gl-rd-style")) {
+		$(`<style id="gl-rd-style">${GL_RD_STYLE}</style>`).appendTo("head");
+	}
+
 	const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
-	const link = (doctype, name, label) =>
-		`<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}" target="_blank">${esc(label || name)}</a>`;
-	const render_cell = (c) =>
-		c.links && c.links.length ? c.links.map((l) => link(l[0], l[1], l[2])).join(", ") : esc(c.v);
+	const url = (doctype, name) => `/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}`;
+	const link = (doctype, name, label) => `<a href="${url(doctype, name)}" target="_blank" rel="noopener">${esc(label || name)}</a>`;
+	const render_cell = (c) => (c.links && c.links.length ? c.links.map((l) => link(l[0], l[1], l[2])).join(", ") : esc(c.v));
+	const NUMERIC = ["Currency", "Float", "Int", "Percent"];
+	const LONG_TEXT = ["Small Text", "Text", "Long Text", "Text Editor", "HTML Editor", "Markdown Editor"];
 
-	const amount = row.debit
-		? `${__("Dr")} ${format_currency(row.debit, row.currency)}`
-		: row.credit
-		? `${__("Cr")} ${format_currency(row.credit, row.currency)}`
+	// 1. The ledger line that was clicked
+	const is_debit = !!row.debit;
+	const amount = row.debit || row.credit;
+	const status = d.status
+		? `<span class="gl-rd-tag" data-color="${esc(d.status.color)}">${esc(d.status.label)}</span>`
 		: "";
-	const ledger_line = `<div style="margin-bottom: 12px; padding: 8px 12px; border-radius: 6px; background: var(--subtle-fg);">
-		<span class="text-muted">${__("Ledger line")}:</span> <b>${esc(row.account)}</b>
-		${amount ? ` &nbsp;·&nbsp; <b>${esc(amount)}</b>` : ""}
-		${row.party ? ` &nbsp;·&nbsp; ${esc(row.party)}` : ""}
-		${row.description ? `<div class="small text-muted" style="margin-top: 2px;">${esc(row.description)}</div>` : ""}
+	const line_html = `
+		<section class="gl-rd-line" aria-label="${__("Ledger line")}">
+			<div>
+				<div class="gl-rd-line__account">${esc(row.account)}</div>
+				${row.party ? `<div class="gl-rd-line__party">${esc(row.party)}</div>` : ""}
+				${row.description ? `<div class="gl-rd-line__desc">${esc(row.description)}</div>` : ""}
+			</div>
+			<div class="gl-rd-line__amount">
+				<div class="gl-rd-line__meta">
+					${amount ? `<span class="gl-rd-tag" data-color="${is_debit ? "blue" : "orange"}">${is_debit ? __("Debit") : __("Credit")}</span>` : ""}
+					${status}
+				</div>
+				${amount ? `<div class="gl-rd-line__value">${esc(format_currency(amount, row.currency))}</div>` : ""}
+			</div>
+		</section>`;
+
+	// 2. Voucher fields: details / amounts / shipment, long text as notes
+	const groups = { details: [], amounts: [], shipment: [], notes: [] };
+	d.fields.forEach((f) => {
+		if (f.group === "shipment") groups.shipment.push(f);
+		else if (LONG_TEXT.includes(f.fieldtype)) {
+			// already shown in the ledger line
+			if ((f.v || "").trim() !== (row.description || "").trim()) groups.notes.push(f);
+		}
+		else if (NUMERIC.includes(f.fieldtype)) groups.amounts.push(f);
+		else groups.details.push(f);
+	});
+	const dl = (title, list, numeric) =>
+		list.length
+			? `<div class="gl-rd-group"><h5>${title}</h5><dl class="gl-rd-dl">
+				${list.map((f) => `<dt>${esc(f.label)}</dt><dd class="${numeric ? "num" : ""}">${render_cell(f)}</dd>`).join("")}
+			</dl></div>`
+			: "";
+	const groups_html = `<div class="gl-rd-groups">
+		${dl(__("Details"), groups.details)}
+		${dl(__("Shipment"), groups.shipment)}
+		${dl(__("Amounts"), groups.amounts, true)}
 	</div>`;
-
-	const fields_html = d.fields
-		.map(
-			(f) => `<div class="col-sm-4" style="margin-bottom: 8px;">
-				<div class="text-muted small">${esc(f.label)}</div><div>${render_cell(f)}</div></div>`
-		)
+	const notes_html = groups.notes
+		.map((f) => `<div class="gl-rd-group"><h5>${esc(f.label)}</h5><p class="gl-rd-notes">${esc(f.v)}</p></div>`)
 		.join("");
 
-	const num = (t, j) => (t.numeric && t.numeric[j] ? ` class="text-right" style="white-space: nowrap;"` : "");
-	const tables_html = d.tables
-		.map((t) => {
-			const has_highlight = t.highlight && t.highlight.some(Boolean);
-			const body = t.rows
-				.map(
-					(cells, i) => `<tr style="${has_highlight && t.highlight[i] ? "background: var(--yellow-highlight-bg, #fff7d6); font-weight: 600;" : ""}">
-						${cells.map((c, j) => `<td${num(t, j)}>${render_cell(c)}</td>`).join("")}</tr>`
-				)
-				.join("");
-			const more =
-				t.total_rows > t.rows.length
-					? `<div class="small text-muted">${__("Showing {0} of {1} rows", [t.rows.length, t.total_rows])}</div>`
+	// 3. Child tables + ledger entries, one tab each
+	let tables_html = "";
+	if (d.tables.length) {
+		const tabs = d.tables
+			.map(
+				(t, i) => `<button type="button" class="gl-rd-tab" role="tab" id="gl-rd-tab-${i}"
+					aria-controls="gl-rd-panel-${i}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}" data-index="${i}">
+					${esc(t.title)} <span class="gl-rd-count">${t.total_rows}</span></button>`
+			)
+			.join("");
+		const panels = d.tables
+			.map((t, i) => {
+				const n = (j) => (t.numeric && t.numeric[j] ? ` class="num"` : "");
+				const head = t.columns.map((c, j) => `<th scope="col"${n(j)}>${esc(c)}</th>`).join("");
+				const body = t.rows
+					.map(
+						(cells, r) => `<tr class="${t.highlight && t.highlight[r] ? "is-line" : ""}">
+							${cells.map((c, j) => `<td${n(j)}>${render_cell(c)}</td>`).join("")}</tr>`
+					)
+					.join("");
+				const foot = t.totals ? `<tfoot><tr>${t.totals.map((c, j) => `<td${n(j)}>${render_cell(c)}</td>`).join("")}</tr></tfoot>` : "";
+				const more = t.total_rows > t.rows.length
+					? `<div class="gl-rd-more">${__("Showing the first {0} of {1} rows. Open the document to see all.", [t.rows.length, t.total_rows])}</div>`
 					: "";
-			return `<div style="margin-top: 14px;">
-				<div style="font-weight: 600; margin-bottom: 6px;">${esc(t.title)}</div>
-				<div class="table-responsive"><table class="table table-bordered table-sm" style="margin-bottom: 4px;">
-					<thead><tr>${t.columns.map((c, j) => `<th${num(t, j)}>${esc(c)}</th>`).join("")}</tr></thead>
-					<tbody>${body}</tbody>
-				</table></div>${more}</div>`;
-		})
-		.join("");
+				return `<div class="gl-rd-panel" role="tabpanel" id="gl-rd-panel-${i}" aria-labelledby="gl-rd-tab-${i}" ${i === 0 ? "" : "hidden"}>
+					<table class="gl-rd-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody>${foot}</table>${more}</div>`;
+			})
+			.join("");
+		const any_highlight = d.tables.some((t) => (t.highlight || []).some(Boolean));
+		tables_html = `<div class="gl-rd-tables">
+			<div class="gl-rd-tabs" role="tablist">${tabs}</div>${panels}
+			${any_highlight ? `<div class="gl-rd-legend"><i></i>${__("Lines posted to {0}", [esc(row.account)])}</div>` : ""}
+		</div>`;
+	}
 
 	const dialog = new frappe.ui.Dialog({
 		title: d.title,
 		size: "extra-large",
 		fields: [{ fieldtype: "HTML", fieldname: "detail" }],
 		primary_action_label: __("Open {0}", [__(d.voucher_type)]),
-		primary_action: () => {
-			window.open(`/app/${frappe.router.slug(d.voucher_type)}/${encodeURIComponent(d.voucher_no)}`, "_blank");
-		},
+		primary_action: () => window.open(url(d.voucher_type, d.voucher_no), "_blank"),
 	});
-	dialog.fields_dict.detail.$wrapper.html(`
-		${ledger_line}
-		<div class="row">${fields_html}</div>
-		${tables_html}
-		<div class="small text-muted" style="margin-top: 8px;">${__("Highlighted rows relate to this ledger line.")}</div>
-	`);
+	const $body = dialog.fields_dict.detail.$wrapper;
+	$body.html(`<div class="gl-rd">${line_html}${groups_html}${notes_html}${tables_html}</div>`);
+
+	// tabs: click + arrow keys
+	const $tabs = $body.find(".gl-rd-tab");
+	const select_tab = (i) => {
+		$tabs.each((j, el) => {
+			$(el).attr({ "aria-selected": j === i, tabindex: j === i ? 0 : -1 });
+		});
+		$body.find(".gl-rd-panel").each((j, el) => {
+			el.hidden = j !== i;
+		});
+	};
+	$tabs.on("click", (e) => select_tab(+$(e.currentTarget).attr("data-index")));
+	$tabs.on("keydown", (e) => {
+		if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+		const i = (+$(e.currentTarget).attr("data-index") + (e.key === "ArrowRight" ? 1 : -1) + $tabs.length) % $tabs.length;
+		select_tab(i);
+		$tabs.eq(i).trigger("focus");
+	});
+
 	dialog.show();
 }

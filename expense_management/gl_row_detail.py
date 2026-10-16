@@ -106,7 +106,7 @@ VOUCHER_CONFIG = {
 		"fields": [
 			"stock_entry_type", "purpose", "posting_date", "work_order", "bom_no", "from_warehouse",
 			"to_warehouse", "custom_purpose_of_issue", "custom_reference_no", "custom_customer",
-			"custom_packing_plan", "total_outgoing_value", "total_incoming_value", "value_difference", "remarks",
+			"custom_packing_plan", "total_outgoing_value", "total_incoming_value", "remarks",
 		],
 		"tables": [
 			("items", ["item_code", "item_name", "qty", "uom", "s_warehouse", "t_warehouse", "batch_no",
@@ -149,6 +149,7 @@ def get_gl_row_detail(voucher_type, voucher_no, account=None, debit=None, credit
 	if voucher_type == "Stock Entry" and doc.stock_entry_type != "Material Issue":
 		# these custom fields only show (and default to "Waste") on the plain Material Issue type
 		fieldnames = [f for f in fieldnames if f not in ("custom_purpose_of_issue", "custom_reference_no")]
+	fieldnames = [fn for fn in fieldnames if not is_redundant_field(doc, fn)]
 	fields = [f for f in (get_field(doc, fn) for fn in fieldnames) if f]
 	tables = [get_table(doc, fn, cols, account) for fn, cols in config.get("tables", [])]
 
@@ -164,9 +165,50 @@ def get_gl_row_detail(voucher_type, voucher_no, account=None, debit=None, credit
 		"title": f"{_(voucher_type)} {voucher_no}",
 		"account": account,
 		"docstatus": doc.docstatus,
+		"status": get_status(doc),
 		"fields": fields,
 		"tables": [t for t in tables if t and t["rows"]],
 	}
+
+
+STATUS_COLORS = {
+	"green": ("Submitted", "Paid", "Completed", "Approved", "Reconciled", "Delivered", "Received", "To Bill"),
+	"orange": ("Draft", "Unpaid", "Partly Paid", "Pending", "To Receive and Bill", "To Deliver and Bill",
+		"Partly Paid and Discounted", "Unpaid and Discounted"),
+	"red": ("Cancelled", "Overdue", "Overdue and Discounted", "Rejected", "Return", "Debit Note Issued",
+		"Credit Note Issued"),
+}
+
+
+def get_status(doc):
+	status = doc.get("status") if doc.meta.has_field("status") else None
+	status = status or {0: "Draft", 1: "Submitted", 2: "Cancelled"}.get(doc.docstatus)
+	color = next((c for c, values in STATUS_COLORS.items() if status in values), "gray")
+	return {"label": _(status), "color": color} if status else None
+
+
+def is_redundant_field(doc, fieldname):
+	"""Fields that repeat something already shown, or only state the default."""
+	value = doc.get(fieldname)
+	if fieldname == "status":
+		return True  # shown as the status badge
+	if fieldname == "purpose" and value == doc.get("stock_entry_type"):
+		return True
+	if fieldname in ("exchange_rate", "conversion_rate") and flt(value) == 1:
+		return True
+	if fieldname == "currency" and doc.get("company"):
+		return value == frappe.get_cached_value("Company", doc.company, "default_currency")
+	if fieldname == "supplier_name" and value == doc.get("supplier"):
+		return True
+	if fieldname == "customer_name" and value == doc.get("customer"):
+		return True
+	if fieldname == "party_name" and value == doc.get("party"):
+		return True
+	if fieldname == "employee_name" and value == doc.get("employee"):
+		return True
+	if fieldname == "total_amount_company_currency" and flt(value) == flt(doc.get("total_amount")):
+		return True
+	return False
 
 
 def get_default_config(meta):
@@ -209,7 +251,7 @@ def get_field(doc, fieldname):
 		return None
 	if df.fieldtype in NUMERIC_FIELDTYPES and not flt(value) and fieldname not in KEEP_ZERO_FIELDS:
 		return None
-	return {"label": _(df.label), **cell(value, df, doc)}
+	return {"label": _(df.label), "fieldtype": df.fieldtype, **cell(value, df, doc)}
 
 
 def get_table(doc, table_fieldname, columns, account=None):
@@ -246,7 +288,7 @@ def set_stock_issue_detail(doc, row, fields, tables):
 		return
 
 	shipment_fields = [
-		(_("Shipment (Customer Order)"), se.get("customer_order"), "Customer Order"),
+		(_("Customer Order"), se.get("customer_order"), "Customer Order"),
 		(_("Shipment Ref"), se.get("shipment_ref"), None),
 		(_("Customer"), se.get("shipment_customer"), "Customer"),
 		(_("Customer Name"), se.get("shipment_customer_name")
@@ -257,7 +299,13 @@ def set_stock_issue_detail(doc, row, fields, tables):
 	existing = {f["label"] for f in fields}
 	for label, value, link_doctype in shipment_fields:
 		if value and label not in existing:
-			fields.append({"label": label, "v": cstr(value), "links": [[link_doctype, value, value]] if link_doctype else []})
+			fields.append({
+				"label": label,
+				"fieldtype": "Data",
+				"group": "shipment",
+				"v": cstr(value),
+				"links": [[link_doctype, value, value]] if link_doctype else [],
+			})
 
 	row_items = report.get_issue_items_for_row(row, se)
 	issue_table = {
@@ -314,8 +362,18 @@ def get_gl_entries_table(doc, account=None):
 		]
 		rows.append(r)
 
+	total_debit = sum(flt(g.debit) for g in gl_entries)
+	total_credit = sum(flt(g.credit) for g in gl_entries)
+	totals = [cell(_("Total"))] + ([cell("")] if show_party else []) + [
+		cell(fmt_money(total_debit, currency=currency)),
+		cell(fmt_money(total_credit, currency=currency)),
+		cell(""),
+		cell(""),
+	]
+
 	return {
 		"title": _("Accounting Ledger Entries"),
+		"totals": totals,
 		"columns": columns,
 		"numeric": [c in (_("Debit"), _("Credit")) for c in columns],
 		"rows": rows,
