@@ -621,46 +621,6 @@ def get_stock_issue_description(row, v_doc):
 	return " - ".join(filter(None, [heading, reference]))
 
 
-def get_stock_issue_detail(row, v_doc):
-	"""Full Material Issue detail for the row-click dialog."""
-	row_items = get_issue_items_for_row(row, v_doc)
-	remarks = (v_doc.get("remarks") or "").strip()
-	if remarks.lower() in ["no remarks", "no remark", "none", "null"]:
-		remarks = ""
-
-	return {
-		"stock_entry": v_doc.name,
-		"stock_entry_type": v_doc.get("stock_entry_type"),
-		"purpose_of_issue": v_doc.get("purpose_of_issue"),
-		"reference_no": v_doc.get("custom_reference_no") if v_doc.get("purpose_of_issue") else None,
-		"customer_order": v_doc.get("customer_order"),
-		"shipment_ref": v_doc.get("shipment_ref"),
-		"customer": v_doc.get("shipment_customer"),
-		"customer_name": v_doc.get("shipment_customer_name"),
-		"customer_batch": v_doc.get("customer_batch"),
-		"invoice_no": v_doc.get("shipment_invoice_no"),
-		"packing_plan": v_doc.get("custom_packing_plan"),
-		"work_order": v_doc.get("work_order"),
-		"remarks": remarks,
-		"account": row.get("account"),
-		"items": [
-			{
-				"item_code": it.item_code,
-				"item_name": it.item_name,
-				"qty": flt(it.qty),
-				"uom": it.uom,
-				"warehouse": it.s_warehouse,
-				"expense_account": it.expense_account,
-				"batches": it.batches,
-				"suppliers": it.suppliers,
-				"supplier_names": it.supplier_names,
-				"in_row": it in row_items,
-			}
-			for it in v_doc.get("issue_items") or []
-		],
-	}
-
-
 def get_invoice_cheque_no(row, v_doc):
 	v_type = row.get("voucher_type")
 	v_no = row.get("voucher_no")
@@ -1007,9 +967,6 @@ def transform_to_custom_columns(raw_data, filters):
 					"against": row.get("against") or "",
 					"description": rmks or desc,
 					"currency": selected_currency,
-					"issue_detail": get_stock_issue_detail(row, v_doc)
-					if v_type == "Stock Entry" and v_doc.get("issue_items")
-					else None,
 				}
 			)
 

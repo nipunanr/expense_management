@@ -98,90 +98,106 @@ frappe.query_reports["General Ledger (Custom Format)"] = frappe.query_reports["G
 			value = $value.wrap("<p></p>").parent().html();
 		}
 
-		if (data && data.issue_detail && column.fieldname === "description") {
-			value = `<span class="gl-issue-detail-link" title="${__("Click to view issue details")}"
+		if (data && data.voucher_type && data.voucher_no && column.fieldname === "description") {
+			value = `<span title="${__("Click the row to view details")}"
 				style="cursor: pointer; text-decoration: underline dotted;">${value}</span>`;
 		}
 
 		return value;
 	},
 	after_datatable_render: function (datatable) {
-		// Clicking a Material Issue row opens the full shipment / item / supplier detail
+		// Clicking any transaction row opens the voucher detail (fields, child tables, ledger entries)
 		$(datatable.bodyScrollable)
-			.off("click.gl-issue-detail")
-			.on("click.gl-issue-detail", ".dt-row", function (e) {
-				if ($(e.target).closest("a").length) return;
+			.off("click.gl-row-detail")
+			.on("click.gl-row-detail", ".dt-row", function (e) {
+				if ($(e.target).closest("a, input, button").length) return;
 				const row_index = $(this).attr("data-row-index");
 				const row = row_index != null ? datatable.datamanager.getData(row_index) : null;
-				if (row && row.issue_detail) {
-					show_gl_issue_detail(row);
+				if (row && row.voucher_type && row.voucher_no) {
+					show_gl_row_detail(row);
 				}
 			});
 	},
 };
 
-function show_gl_issue_detail(row) {
-	const d = row.issue_detail;
+function show_gl_row_detail(row) {
+	frappe.call({
+		method: "expense_management.gl_row_detail.get_gl_row_detail",
+		args: {
+			voucher_type: row.voucher_type,
+			voucher_no: row.voucher_no,
+			account: row.account,
+			debit: row.debit || 0,
+			credit: row.credit || 0,
+		},
+		freeze: true,
+		callback: (r) => r.message && render_gl_row_detail(r.message, row),
+	});
+}
+
+function render_gl_row_detail(d, row) {
 	const esc = (v) => frappe.utils.escape_html(v == null ? "" : String(v));
-	const link = (doctype, name) =>
-		name ? `<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}" target="_blank">${esc(name)}</a>` : "";
+	const link = (doctype, name, label) =>
+		`<a href="/app/${frappe.router.slug(doctype)}/${encodeURIComponent(name)}" target="_blank">${esc(label || name)}</a>`;
+	const render_cell = (c) =>
+		c.links && c.links.length ? c.links.map((l) => link(l[0], l[1], l[2])).join(", ") : esc(c.v);
 
-	const fields = [
-		[__("Stock Entry"), link("Stock Entry", d.stock_entry)],
-		[__("Stock Entry Type"), esc(d.stock_entry_type)],
-		[__("Purpose of Issue"), esc(d.purpose_of_issue)],
-		[__("Reference No"), esc(d.reference_no)],
-		[__("Shipment (Customer Order)"), link("Customer Order", d.customer_order)],
-		[__("Customer"), d.customer ? `${link("Customer", d.customer)}${d.customer_name && d.customer_name !== d.customer ? " - " + esc(d.customer_name) : ""}` : ""],
-		[__("Customer Batch"), esc(d.customer_batch)],
-		[__("Invoice No"), esc(d.invoice_no)],
-		[__("Packing Plan"), link("Packing Plan", d.packing_plan)],
-		[__("Work Order"), link("Work Order", d.work_order)],
-		[__("Remarks"), esc(d.remarks)],
-	].filter(([, v]) => v);
+	const amount = row.debit
+		? `${__("Dr")} ${format_currency(row.debit, row.currency)}`
+		: row.credit
+		? `${__("Cr")} ${format_currency(row.credit, row.currency)}`
+		: "";
+	const ledger_line = `<div style="margin-bottom: 12px; padding: 8px 12px; border-radius: 6px; background: var(--subtle-fg);">
+		<span class="text-muted">${__("Ledger line")}:</span> <b>${esc(row.account)}</b>
+		${amount ? ` &nbsp;·&nbsp; <b>${esc(amount)}</b>` : ""}
+		${row.party ? ` &nbsp;·&nbsp; ${esc(row.party)}` : ""}
+		${row.description ? `<div class="small text-muted" style="margin-top: 2px;">${esc(row.description)}</div>` : ""}
+	</div>`;
 
-	const header_html = fields
+	const fields_html = d.fields
 		.map(
-			([label, v]) => `<div class="col-sm-6" style="margin-bottom: 8px;">
-				<div class="text-muted small">${label}</div><div>${v}</div></div>`
+			(f) => `<div class="col-sm-4" style="margin-bottom: 8px;">
+				<div class="text-muted small">${esc(f.label)}</div><div>${render_cell(f)}</div></div>`
 		)
 		.join("");
 
-	const has_other_rows = d.items.some((it) => !it.in_row);
-	const items_html = d.items
-		.map((it) => {
-			const suppliers = (it.suppliers || [])
-				.map((s, i) => link("Supplier", s) + (it.supplier_names[i] && it.supplier_names[i] !== s ? ` - ${esc(it.supplier_names[i])}` : ""))
-				.join("<br>");
-			const batches = (it.batches || []).map((b) => link("Batch", b)).join("<br>");
-			return `<tr style="${has_other_rows && !it.in_row ? "opacity: 0.55;" : ""}">
-				<td>${link("Item", it.item_code)}${it.item_name && it.item_name !== it.item_code ? `<div class="small text-muted">${esc(it.item_name)}</div>` : ""}</td>
-				<td class="text-right">${esc(format_number(it.qty, null, Number.isInteger(it.qty) ? 0 : 3))} ${esc(it.uom)}</td>
-				<td>${batches}</td>
-				<td>${suppliers || `<span class="text-muted">${__("Not found")}</span>`}</td>
-				<td>${esc(it.warehouse)}</td>
-				<td>${esc(it.expense_account)}</td>
-			</tr>`;
+	const num = (t, j) => (t.numeric && t.numeric[j] ? ` class="text-right" style="white-space: nowrap;"` : "");
+	const tables_html = d.tables
+		.map((t) => {
+			const has_highlight = t.highlight && t.highlight.some(Boolean);
+			const body = t.rows
+				.map(
+					(cells, i) => `<tr style="${has_highlight && t.highlight[i] ? "background: var(--yellow-highlight-bg, #fff7d6); font-weight: 600;" : ""}">
+						${cells.map((c, j) => `<td${num(t, j)}>${render_cell(c)}</td>`).join("")}</tr>`
+				)
+				.join("");
+			const more =
+				t.total_rows > t.rows.length
+					? `<div class="small text-muted">${__("Showing {0} of {1} rows", [t.rows.length, t.total_rows])}</div>`
+					: "";
+			return `<div style="margin-top: 14px;">
+				<div style="font-weight: 600; margin-bottom: 6px;">${esc(t.title)}</div>
+				<div class="table-responsive"><table class="table table-bordered table-sm" style="margin-bottom: 4px;">
+					<thead><tr>${t.columns.map((c, j) => `<th${num(t, j)}>${esc(c)}</th>`).join("")}</tr></thead>
+					<tbody>${body}</tbody>
+				</table></div>${more}</div>`;
 		})
 		.join("");
 
 	const dialog = new frappe.ui.Dialog({
-		title: __("Material Issue {0}", [d.stock_entry]),
+		title: d.title,
 		size: "extra-large",
 		fields: [{ fieldtype: "HTML", fieldname: "detail" }],
+		primary_action_label: __("Open {0}", [__(d.voucher_type)]),
+		primary_action: () => {
+			window.open(`/app/${frappe.router.slug(d.voucher_type)}/${encodeURIComponent(d.voucher_no)}`, "_blank");
+		},
 	});
 	dialog.fields_dict.detail.$wrapper.html(`
-		<div class="row">${header_html}</div>
-		<div class="table-responsive" style="margin-top: 8px;">
-			<table class="table table-bordered table-sm">
-				<thead><tr>
-					<th>${__("Item")}</th><th class="text-right">${__("Qty")}</th><th>${__("Batch")}</th>
-					<th>${__("Supplier")}</th><th>${__("Source Warehouse")}</th><th>${__("Expense Account")}</th>
-				</tr></thead>
-				<tbody>${items_html}</tbody>
-			</table>
-		</div>
-		${has_other_rows ? `<div class="small text-muted">${__("Faded items are posted to another account of this voucher, not to {0}.", [esc(d.account)])}</div>` : ""}
+		${ledger_line}
+		<div class="row">${fields_html}</div>
+		${tables_html}
+		<div class="small text-muted" style="margin-top: 8px;">${__("Highlighted rows relate to this ledger line.")}</div>
 	`);
 	dialog.show();
 }
